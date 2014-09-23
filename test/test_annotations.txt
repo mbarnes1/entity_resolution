@@ -1,5 +1,0 @@
-PosterID,site,Date,State,City,Perspective_1st,Perspective_3rd,Name,Age,Cost,Height_ft,Height_in,Weight,Cup,Chest,Waist,Hip,Ethnicity,SkinColor,EyeColor,HairColor,Restriction_Type,Restriction_Ethnicity,Restriction_Age,PhoneNumber,AreaCode_State,AreaCode_Cities,Email,Url,Media,Images
-0000001,neworleans,Thu Jan 30 02:41:11 EST 2014,Louisiana,New Orleans,8,0,haley,22,,,,,,,,,,,,,,,,8005551111,NC,charlotte,,,,img1;img2;img3
-0000002,saratoga,Thu Jan 30 02:05:48 EST 2014,Saratoga,New York,10,0,carmen,21,,5.0,0.0,,,,,,,,,,,,,8005552222,NY,nyc: bronx  brooklyn  queens  staten island,,,,img4;img5;img6
-0000003,statecollege,Thu Jan 30 01:40:10 EST 2014,State College,Pennsylvania,13,0,amelia,24,,,,,,,,,,white,,,,,,,,,,,,
-0000001,sanfrancisco,Thu Jan 30 01:11:58 EST 2014,San Francisco,California,1,0,steph;haley,23,,5.0,3.0,125.0,C,34.0,none,none,persian,,,,,,,8005552222,FL,miami  key west,,,,img7;img8;img4
