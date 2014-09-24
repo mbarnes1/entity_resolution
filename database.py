@@ -23,14 +23,14 @@ class RecordDatabase(object):
         self.records = dict()
         self._max_records = max_records
         ins = open(self._annotation_path, 'r')
-        feature_names = next(ins).split(',')  # skip the first line, its a header
-        feature_types = next(ins).split(',')  # variable type (e.g. int, string, date)
-        ignore_indices = find_empty_entries(feature_types)
+        feature_names = next(ins).strip('\n').split(',')  # skip the first line, its a header
+        feature_types = next(ins).strip('\n').split(',')  # variable type (e.g. int, string, date)
+        ignore_indices = find_in_list(feature_types, '')
         self.feature_names = remove_indices(ignore_indices, feature_names)
         self.feature_types = remove_indices(ignore_indices, feature_types)
-        self.feature_strengths = remove_indices(ignore_indices, next(ins).split(','))
-        self.pairwise_uses = remove_indices(ignore_indices, next(ins).split(','))
-        self.blocking = remove_indices(ignore_indices, next(ins).split(','))
+        self.feature_strengths = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
+        self.blocking = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
+        self.pairwise_uses = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
 
         # Loop through all the records
         for ad_number, sample in enumerate(ins):
@@ -41,6 +41,20 @@ class RecordDatabase(object):
             self.records[ad_number] = r
             if ad_number >= self._max_records-1:
                 break
+
+    # def get_features(self, record, feature_indices):
+    #     """
+    #     Returns all the requested features from a record
+    #     :param record: Record object
+    #     :return features: Set of all the requested features as strings of form 'feature_name + _ + feature'
+    #     """
+    #     features = set()
+    #     for feature_index in feature_indices:
+    #         feature = record.features[feature_index]
+    #         feature_name = self.feature_names[feature_index]
+    #         for subfeature in feature:
+    #             features.add(feature_name + '_' + str(subfeature))
+    #     return features
 
 
 def remove_indices(remove, lst):
@@ -54,10 +68,11 @@ def remove_indices(remove, lst):
     return new_lst
 
 
-def find_empty_entries(lst):
+def find_in_list(lst, field):
     """
-    Finds empty list entries and returns their indicies
-    :param lst: List to find empty entries
-    :return i: Indices of empty entries in lst
+    Finds all occurences of field in list and returns their indicies
+    :param field: The entry to find in list
+    :param lst: List to search
+    :return i: Indices of entries in lst
     """
-    return [i for i, x in enumerate(lst) if x == '']
+    return [i for i, x in enumerate(lst) if x == field]
