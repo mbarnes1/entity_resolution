@@ -42,7 +42,7 @@ class Record(object):
                     if feature_type == 'string':
                         self.features[index].add(f)
                     elif feature_type == 'int':
-                        self.features[index].add(int(f))
+                        self.features[index].add(int(float(f)))
                     elif feature_type == 'date':
                         self.features[index].add(get_date(f))
             index += 1
