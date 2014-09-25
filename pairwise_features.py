@@ -1,46 +1,71 @@
+"""
+All pairwise features and functions. This includes training and testing the match function.
+"""
 from sklearn import linear_model
 import numpy as np
 import random
 import warnings
 from roc import RocCurve
 from copy import deepcopy
+from itertools import izip
 __author__ = 'mbarnes1'
 
 
 class SurrogateMatchFunction(object):
-    def __init__(self, records, strong_blocks, train_size, decision_threshold):
-        self._strong_blocks = deepcopy(strong_blocks)
+    """
+    The all important match function, named after the surrogate labels it uses for training
+    """
+    def __init__(self, database, strong_blocks, train_size, decision_threshold):
+        self._remaining_strong_blocks = deepcopy(strong_blocks)
+        self._database = database
         self._used_pairs = set()  # pairs used, so as not to repeat samples in training and testing
         self._x1_train = []
         self._x2_train = []
         self.x2_mean = []
         self.roc = []
         self.logreg = linear_model.LogisticRegression()
-        self._train(records, train_size)
+        self._train(train_size)
         self.decision_threshold = decision_threshold
 
-    def _train(self, records, train_size):
-        self._x1_train, self._x2_train, self.x2_mean = self._get_pairs(records, train_size, True)
+    def _train(self, train_size):
+        """
+        Get training samples and trains the surrogate match function
+        :param train_size: Number of pairwise samples to use in training
+        """
+        self._x1_train, self._x2_train, self.x2_mean = self._get_pairs(train_size, True)
         self.logreg.fit(self._x2_train, self._x1_train)
 
-    def test(self, records, test_size):
-        x1_test, x2_test, _ = self._get_pairs(records, test_size, True)
+    def test(self, test_size):
+        """
+        Get testing samples and test the surrogate match function. Evaluated with ROC curve
+        :param database: RecordDatabase object
+        :param test_size: Number of pairwise samples to use in testing
+        :return RocCurve: An RocCurve object
+        """
+        x1_test, x2_test, _ = self._get_pairs(test_size, True)
         x1_bar_probability = self.logreg.predict_proba(x2_test)[:, 1]
-        output = np.column_stack((x1_test, x1_bar_probability))
-        np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
+        #output = np.column_stack((x1_test, x1_bar_probability))
+        #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
         return RocCurve(x1_test, x1_bar_probability)
 
-    def _get_pairs(self, records, number_samples, balancing):
-        # Where balancing is boolean on whether to balance classes using strong_blocks
-        numrecords = len(records)
+    def _get_pairs(self, number_samples, balancing):
+        """
+        Pseudo-randomly samples pairs of records, without replacement.
+        Can balance classes, approximated by a strong feature match.
+        :param number_samples: Int, number of samples to return
+        :param balancing: Boolean, whether to balance classes or not
+        :return x1: Vector of strong features, values takes either 0 or 1
+        :return x2: n x m Matrix of weak features, where n is number_samples and m is number of weak features
+        :return m: Mean imputation vector of weak features, 1 x number of weak features
+        """
+        number_records = len(self._database.records)
         x1 = list()
         x2 = list()
-        pairs = list()
-        while len(pairs) < number_samples:
+        while len(x1) < number_samples:
             to_balance = random.choice([True, False])
             if balancing and to_balance:
-                while self._strong_blocks:
-                    _, block = self._strong_blocks.popitem()
+                while self._remaining_strong_blocks:
+                    _, block = self._remaining_strong_blocks.popitem()  # Deep copied in init, safe to destructively pop
                     if len(block) >= 2:
                         p1 = block.pop()
                         p2 = block.pop()
@@ -49,37 +74,41 @@ class SurrogateMatchFunction(object):
                 else:
                     balancing = False
                     warnings.warn('Not enough strong blocks for full balancing')
-                    pair = (random.randint(0, numrecords-1), random.randint(0, numrecords-1))
+                    pair = (random.randint(0, number_records-1), random.randint(0, number_records-1))
             else:
-                pair = (random.randint(0, numrecords-1), random.randint(0, numrecords-1))
+                pair = (random.randint(0, number_records-1), random.randint(0, number_records-1))
             if pair not in self._used_pairs and pair[0] != pair[1]:  # if pair is valid
                 self._used_pairs.add(pair)
                 pair_flipped = (pair[1], pair[0])
                 self._used_pairs.add(pair_flipped)
-                pairs.append(pair)
-        for pair in pairs:
-            r1 = records[pair[0]]
-            r2 = records[pair[1]]
-            x1.append(get_x1(r1, r2))
-            x2.append(get_x2(r1, r2))
+                r1 = self._database.records[pair[0]]
+                r2 = self._database.records[pair[1]]
+                _x1 = self.get_x1(r1, r2)
+                if _x1 != np.NaN:  # are there strong features in both ads?
+                    x1.append(_x1)
+                    x2.append(self.get_x2(r1, r2))
         x1 = np.asarray(x1)
         x2 = np.asarray(x2)
         m = mean_imputation(x2)
-        x2 = x2[~np.isnan(x1), :]
-        x1 = x1[~np.isnan(x1)]
         return x1, x2, m
 
-    # Determines if two records r1 and r2 match
     def match(self, r1, r2, match_type):
-        x1 = get_x1(r1, r2)
+        """
+        Determines if two records match
+        :param r1: Record object
+        :param r2: Record object
+        :param match_type: Match type use in ER algorithm. String 'strong', 'weak', or 'weak_strong'
+        :return: False or True, whether r1 and r2 match
+        """
+        x1 = self.get_x1(r1, r2)
         if np.isnan(x1):
             x1 = False
-        if match_type == 'strong':
+        if match_type == 'strong':  # If only using strong matches, this is easy
             if x1:
                 return True
             else:
                 return False
-        x2 = get_x2(r1, r2)
+        x2 = self.get_x2(r1, r2)
         np.copyto(x2, self.x2_mean, where=np.isnan(x2))  # mean imputation
         p_x1 = self.logreg.predict_proba(x2)[0, 1]
         x1_hat = p_x1 > self.decision_threshold
@@ -94,9 +123,61 @@ class SurrogateMatchFunction(object):
             else:
                 return False
 
+    def get_x2(self, r1, r2):
+        """
+        Calculates the weak feature vector x2 based on differences between two records
+        :param r1: Record object
+        :param r2: Record object
+        :return x2: 1-D vector with m entries, where m is number of weak features.
+        """
+        x2 = list()
+        for index, (f1, f2, pairwise_use, strength) in enumerate(izip(r1.features, r2.features,
+                                                                      self._database.pairwise_uses,
+                                                                      self._database.feature_strengths)):
+            if strength == 'weak':
+                if pairwise_use == 'binary_match':
+                    x2.append(binary_match(f1, f2))
+                elif pairwise_use == 'numerical_difference':
+                    x2.append(numerical_difference(f1, f2))
+                elif pairwise_use == 'number_matches':
+                    x2.append(number_matches(f1, f2))
+                elif pairwise_use == 'special_date_difference':
+                    x2.append(date_difference(f1, f2))
+                else:
+                    raise Exception('Invalid pairwise use: ' + pairwise_use)
+        x2 = np.asarray(x2)
+        return x2
+
+    def get_x1(self, r1, r2):
+        """
+        Calculates the strong feature value x1 based on differences between two records
+        If any strong feature matches, x1 is True
+        :param r1: Record object
+        :param r2: Record object
+        :return x1: 1 (match), 0 (mismatch), or NaN (at least one record has no strong features, not enough info)
+        """
+        x1 = list()
+        for f1, f2, pairwise_use, strength in izip(r1.features, r2.features, self._database.pairwise_uses,
+                                                   self._database.feature_strengths):
+            if strength == 'strong':
+                if (pairwise_use == 'binary_match') | (pairwise_use == 'number_matches'):
+                    x1.append(binary_match(f1, f2))
+                else:
+                    raise Exception('Invalid pairwise use for strong features: ' + pairwise_use)
+        x1 = np.asarray(x1)
+        if np.isnan(x1).all():  # if all nan, return nan
+            x1 = np.nan
+        else:
+            x1 = bool(np.nansum(x1))  # else return true/false
+        return x1
+
 
 def mean_imputation(x):
-    # Determine the mean
+    """
+    Determines the column means of all non-NaN entries in matrix
+    :param x: n x m Matrix
+    :return m: 1-D vector with m entries, the column means of non-NaN entries in x
+    """
     m = np.nansum(x, axis=0)/np.sum(~np.isnan(x), axis=0)
     m = np.nan_to_num(m)  # if all one feature was NaN, mean will also be NaN. Replace with 0
     # Fill in NaN values. No longer necessary for numpy >= v1.9
@@ -104,91 +185,29 @@ def mean_imputation(x):
     return m
 
 
-# Calculates the weak feature vector x2 based on differences between two records
-# not using cost yet, complicated formulation
-# add restriction types
-# correlate date and location to a feasibility
-def get_x2(r1, r2):
-    x2 = np.zeros(20, dtype=float)  # where 20 is number of features
-
-    # Sites
-    x2[0] = exact_matches(r1.sites, r2.sites)
-    # Dates
-    if bool(r1.dates) & bool(r2.dates):
-        for date1 in r1.dates:  # recall dates in a set, don't need to use iteritemes()
-            for date2 in r2.dates:
-                x2[1] = min(x2[1], abs((date1-date2).seconds))
+def binary_match(features_1, features_2):
+    """
+    Returns True if any feature matches between two feature sets.
+    Satisfies ICAR properties
+    :param features_1: Set of features
+    :param features_2: Set of features
+    :return: True, False, or NaN (not enough info to make decision, if either set is empty)
+    """
+    if bool(features_1) & bool(features_2):
+        x = bool(features_1 & features_2)
     else:
-        x2[1] = np.nan
-    # State
-    x2[2] = exact_matches(r1.states, r2.states)
-    # City
-    x2[3] = exact_matches(r1.cities, r2.cities)
-    # Perspective
-    x2[4] = 0  # set to zero until I've found an function satisfying ICAR properties
-    # Name
-    x2[5] = exact_matches(r1.names, r2.names)
-    # Age
-    x2[6] = difference_minimum(r1.ages, r2.ages)
-    # Height
-    x2[7] = difference_minimum(r1.heights, r2.heights)
-    # Weight
-    x2[8] = difference_minimum(r1.weights, r2.weights)
-    # Cup size
-    x2[9] = exact_matches(r1.cups, r2.cups)
-    # Chest size
-    x2[10] = difference_minimum(r1.chests, r2.chests)
-    # Waist size
-    x2[11] = difference_minimum(r1.waists, r2.waists)
-    # Hip size
-    x2[12] = difference_minimum(r1.hips, r2.hips)
-    # Ethnicity
-    x2[13] = exact_matches(r1.ethnicities, r2.ethnicities)
-    # Skin color
-    x2[14] = exact_matches(r1.skincolors, r2.skincolors)
-    # Eye color
-    x2[15] = exact_matches(r1.eyecolors, r2.eyecolors)
-    # Hair color
-    x2[16] = exact_matches(r1.haircolors, r2.haircolors)
-    # URL
-    x2[17] = exact_matches(r1.urls, r2.urls)
-    # Media
-    x2[18] = exact_matches(r1.medias, r2.medias)
-    # Images
-    x2[19] = exact_matches(r1.images, r2.images)
-    return x2
+        x = np.nan
+    return x
 
 
-def get_strong_features(r):
-    strong_features = set()
-    for phone in r.phones:
-        feature = 'phone_' + str(phone)
-        strong_features.add(feature)
-    for poster in r.posters:
-        feature = 'poster_' + str(poster)
-        strong_features.add(feature)
-    for email in r.emails:
-        feature = 'email_' + str(email)
-        strong_features.add(feature)
-    return strong_features
-
-
-# Calculates the strong feature vector x1 based on differences between two records
-def get_x1(r1, r2):
-    # If any phone, poster, or email match, it is a match
-    strong_r1 = get_strong_features(r1)
-    strong_r2 = get_strong_features(r2)
-    if strong_r1 & strong_r2:
-        x1 = 1
-    elif bool(strong_r1) & bool(strong_r2):
-        x1 = 0
-    else:
-        x1 = np.nan  # not enough values to determine x1
-    return x1
-
-
-# Satisfies ICAR properties
-def exact_matches(feat1, feat2):
+def number_matches(feat1, feat2):
+    """
+    Intersection size of two feature sets
+    Satisfies ICAR properties
+    :param feat1: Set of features
+    :param feat2: Set of features
+    :return: Int or NaN (not enough info to make decision, if either set is empty)
+    """
     if bool(feat1) & bool(feat2):
         x = len(feat1 & feat2)  # intersection
     else:
@@ -196,14 +215,38 @@ def exact_matches(feat1, feat2):
     return x
 
 
-# Satisfies ICAR properties
-def difference_minimum(feat1, feat2):
+def numerical_difference(feat1, feat2):
+    """
+    Minimum pairwise distance between two numerical feature sets
+    Satisfies ICAR properties
+    :param feat1: Set of features
+    :param feat2: Set of features
+    :return: Float or NaN (not enough info to make decision, if either set is empty)
+    """
     if bool(feat1) & bool(feat2):
         x = np.Inf
         for f1 in feat1:
             for f2 in feat2:
                 if abs(f1 - f2) < x:
                     x = abs(f1 - f2)
+    else:
+        x = np.nan
+    return x
+
+
+def date_difference(feat1, feat2):
+    """
+    Minimum pairwise disteance between two date feature sets, in seconds
+    Satisfies ICAR properties
+    :param feat1: Set of date features
+    :param feat2: Set of date features
+    :return: Float or NaN (not enough info to make decision, if either set is empty)
+    """
+    if bool(feat1) & bool(feat2):
+        x = np.Inf
+        for date1 in feat1:  # recall dates in a set, don't need to use iteritemes()
+            for date2 in feat2:
+                x = min(x, abs((date1-date2).seconds))
     else:
         x = np.nan
     return x

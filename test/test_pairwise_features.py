@@ -1,6 +1,7 @@
 __author__ = 'mbarnes1'
 import unittest
-from pairwise_features import SurrogateMatchFunction, mean_imputation, get_x2, get_x1, exact_matches, difference_minimum
+from pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
+    binary_match
 from database import RecordDatabase
 from blocking import BlockingScheme
 import numpy as np
@@ -9,9 +10,9 @@ from math import isnan
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._database = RecordDatabase('test_annotations.txt')
-        self._blocking = BlockingScheme(self._database.records)
-        self._surrogate = SurrogateMatchFunction(self._database.records, self._blocking.strong_blocks, 6, 0.99)
+        self._database = RecordDatabase('test_annotations.csv')
+        self._blocking = BlockingScheme(self._database)
+        self._surrogate = SurrogateMatchFunction(self._database, self._blocking.strong_blocks, 6, 0.99)
 
     def test_mean_imputation(self):
         x = np.array([[1, 2, 3, 4], [np.NaN, 4, 5, np.NaN], [1, 6, np.NaN, np.NaN]])
@@ -35,10 +36,10 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(self._surrogate.match(r3, r3, 'strong'))
 
     def test_test(self):
-        database = RecordDatabase('test_annotations_1000.txt')
-        blocking = BlockingScheme(database.records)
-        surrogate = SurrogateMatchFunction(database.records, blocking.strong_blocks, 50, 0.99)
-        roc = surrogate.test(database.records, 50)
+        database = RecordDatabase('test_annotations_10000.csv')
+        blocking = BlockingScheme(database)
+        surrogate = SurrogateMatchFunction(database, blocking.strong_blocks, 50, 0.99)
+        roc = surrogate.test(50)
         roc.make_plot()
 
     def test_get_x1(self):
@@ -46,23 +47,23 @@ class MyTestCase(unittest.TestCase):
         r1 = self._database.records[1]
         r2 = self._database.records[2]
         r3 = self._database.records[3]
-        self.assertEqual(get_x1(r0, r3), True)
-        self.assertEqual(get_x1(r1, r3), True)
-        self.assertEqual(get_x1(r0, r1), False)
-        self.assertEqual(get_x1(r0, r2), False)
-        self.assertEqual(get_x1(r1, r2), False)
-        self.assertEqual(get_x1(r2, r3), False)
+        self.assertEqual(self._surrogate.get_x1(r0, r3), True)
+        self.assertEqual(self._surrogate.get_x1(r1, r3), True)
+        self.assertEqual(self._surrogate.get_x1(r0, r1), False)
+        self.assertEqual(self._surrogate.get_x1(r0, r2), False)
+        self.assertEqual(self._surrogate.get_x1(r1, r2), False)
+        self.assertEqual(self._surrogate.get_x1(r2, r3), False)
 
     def test_get_x2(self):
         r0 = self._database.records[0]
-        x2 = get_x2(r0, r0)
+        x2 = self._surrogate.get_x2(r0, r0)
         self.assertEqual(x2[0], 1)
-        # self.assertEqual(x2[1], 0)  #
+        self.assertEqual(x2[1], 0)
         self.assertEqual(x2[2], 1)
         self.assertEqual(x2[3], 1)
-        self.assertEqual(x2[4], 0)
-        self.assertEqual(x2[5], 1)
-        self.assertEqual(x2[6], 0)
+        self.assertEqual(x2[4], 1)
+        self.assertEqual(x2[5], 0)
+        self.assertTrue(isnan(x2[6]))
         self.assertTrue(isnan(x2[7]))
         self.assertTrue(isnan(x2[8]))
         self.assertTrue(isnan(x2[9]))
@@ -77,21 +78,31 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(isnan(x2[18]))
         self.assertEqual(x2[19], 3)
 
-    def test_exact_matches(self):
+    def test_number_matches(self):
         x_a = {1, 2, 3}
         x_b = {3, 4, 5}
         x_c = set()
-        self.assertEqual(exact_matches(x_a, x_a), 3)
-        self.assertEqual(exact_matches(x_a, x_b), 1)
-        self.assertTrue(isnan(exact_matches(x_a, x_c)))
+        self.assertEqual(number_matches(x_a, x_a), 3)
+        self.assertEqual(number_matches(x_a, x_b), 1)
+        self.assertTrue(isnan(number_matches(x_a, x_c)))
 
-    def test_difference_minimum(self):
+    def test_numerical_difference(self):
         x_a = {1, 2, 3}
         x_b = {4, 5, 5}
         x_c = set()
-        self.assertEqual(difference_minimum(x_a, x_a), 0)
-        self.assertEqual(difference_minimum(x_a, x_b), 1)
-        self.assertTrue(isnan(difference_minimum(x_a, x_c)))
+        self.assertEqual(numerical_difference(x_a, x_a), 0)
+        self.assertEqual(numerical_difference(x_a, x_b), 1)
+        self.assertTrue(isnan(numerical_difference(x_a, x_c)))
+
+    def test_binary_match(self):
+        x_a = {1, 2, 3}
+        x_b = {3, 4, 5}
+        x_c = set()
+        x_d = {5}
+        self.assertEqual(binary_match(x_a, x_a), 1)
+        self.assertEqual(binary_match(x_a, x_b), 1)
+        self.assertEqual(binary_match(x_a, x_d), 0)
+        self.assertTrue(isnan(binary_match(x_a, x_c)))
 
 if __name__ == '__main__':
     unittest.main()
