@@ -2,7 +2,7 @@ import unittest
 import datetime
 import sys
 sys.path.append('../../')
-from entity_resolution.record import Record, month, get_date
+from entity_resolution.record import Record, FeatureDescriptor, month, get_date
 __author__ = 'mbarnes1'
 
 
@@ -16,14 +16,16 @@ class MyTestCase(unittest.TestCase):
                               'Louisiana_2014_1_30_1391067671000_6_2.jpg;Louisiana_2014_1_30_1391067671000_6_3.jpg;' \
                               'Louisiana_2014_1_30_1391067671000_6_4.jpg;Louisiana_2014_1_30_1391067671000_6_5.jpg'
         self._features_full = self._features_full.split(',')
-        self._feature_types = ('int,string,date,string,string,int,int,string,int,string,int,int,string,int,int,int,'
+        feature_types = ('int,string,date,string,string,int,int,string,int,string,int,int,string,int,int,int,'
                                'string,string,string,string,,,,int,string,string,string,string,string,'
                                'string').split(',')
-        self._r0 = Record(0, len(self._features_full))
-        self._r1 = Record(0, len(self._features_full))
+        feature_descriptor = FeatureDescriptor('', feature_types, '', '', '')
+        feature_descriptor.number = len(feature_types)
+        self._r0 = Record(0, feature_descriptor)
+        self._r1 = Record(0, feature_descriptor)
 
     def test_initialize_from_full_annotation(self):
-        self._r0.initialize_from_annotation(self._features_full, self._feature_types)
+        self._r0.initialize_from_annotation(self._features_full)
         self.assertSetEqual(self._r0.ads, {0})
         self.assertSetEqual(self._r0.features[0], {9552601})
         self.assertSetEqual(self._r0.features[1], {'neworleans'})
@@ -58,20 +60,20 @@ class MyTestCase(unittest.TestCase):
 
     def test_eq(self):
         self.assertEqual(self._r0, self._r1)
-        self._r0.initialize_from_annotation(self._features_full, self._feature_types)
+        self._r0.initialize_from_annotation(self._features_full)
         self.assertNotEqual(self._r0, self._r1)
-        self._r1.initialize_from_annotation(self._features_full, self._feature_types)
+        self._r1.initialize_from_annotation(self._features_full)
         self.assertEqual(self._r0, self._r1)
 
     def test_initialize_from_empty_annotation(self):
         annotation_empty = ',,,,,,,,,,,,,,,,,,,,,,,,,,,,,'.split(',')
-        self._r0.initialize_from_annotation(annotation_empty, self._feature_types)
+        self._r0.initialize_from_annotation(annotation_empty)
         self.assertEqual(self._r0, self._r1)
 
     def test_merge(self):
         self._r0.merge(self._r1)
         self.assertEqual(self._r0, self._r1)
-        self._r0.initialize_from_annotation(self._features_full, self._feature_types)
+        self._r0.initialize_from_annotation(self._features_full)
         self._r0.merge(self._r1)
         self.assertNotEqual(self._r0, self._r1)
         self._r1.merge(self._r0)
