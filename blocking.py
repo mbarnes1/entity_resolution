@@ -79,13 +79,14 @@ class BlockingScheme(object):
         :param database: RecordDatabase object
         """
         to_block = list()
-        for index, (strength, blocking) in enumerate(izip(database.feature_strengths, database.blocking)):
+        for index, (strength, blocking) in enumerate(izip(database.feature_descriptor.strengths,
+                                                          database.feature_descriptor.blocking)):
                 if (strength == block_strength) & (blocking == 'block'):  # did user specify blocking for this feature?
                     to_block.append(index)
         for ad, record in database.records.iteritems():  # loop through all the records
             print block_strength, 'blocking ad', ad
             for index in to_block:
-                feature_name = database.feature_names[index]
+                feature_name = database.feature_descriptor.names[index]
                 for subfeature in record.features[index]:
                     feature = feature_name + '_' + str(subfeature)
                     if feature in blocks_pointer:

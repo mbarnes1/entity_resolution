@@ -132,8 +132,8 @@ class SurrogateMatchFunction(object):
         """
         x2 = list()
         for index, (f1, f2, pairwise_use, strength) in enumerate(izip(r1.features, r2.features,
-                                                                      self._database.pairwise_uses,
-                                                                      self._database.feature_strengths)):
+                                                                      self._database.feature_descriptor.pairwise_uses,
+                                                                      self._database.feature_descriptor.strengths)):
             if strength == 'weak':
                 if pairwise_use == 'binary_match':
                     x2.append(binary_match(f1, f2))
@@ -157,8 +157,9 @@ class SurrogateMatchFunction(object):
         :return x1: 1 (match), 0 (mismatch), or NaN (at least one record has no strong features, not enough info)
         """
         x1 = list()
-        for f1, f2, pairwise_use, strength in izip(r1.features, r2.features, self._database.pairwise_uses,
-                                                   self._database.feature_strengths):
+        for f1, f2, pairwise_use, strength in izip(r1.features, r2.features,
+                                                   self._database.feature_descriptor.pairwise_uses,
+                                                   self._database.feature_descriptor.strengths):
             if strength == 'strong':
                 if (pairwise_use == 'binary_match') | (pairwise_use == 'number_matches'):
                     x1.append(binary_match(f1, f2))

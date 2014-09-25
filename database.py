@@ -1,4 +1,4 @@
-from record import Record
+from record import Record, FeatureDescriptor
 import numpy as np
 __author__ = 'mbarnes1'
 
@@ -26,35 +26,24 @@ class RecordDatabase(object):
         feature_names = next(ins).strip('\n').split(',')  # skip the first line, its a header
         feature_types = next(ins).strip('\n').split(',')  # variable type (e.g. int, string, date)
         ignore_indices = find_in_list(feature_types, '')
-        self.feature_names = remove_indices(ignore_indices, feature_names)
-        self.feature_types = remove_indices(ignore_indices, feature_types)
-        self.feature_strengths = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
-        self.blocking = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
-        self.pairwise_uses = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
 
+        feature_names = remove_indices(ignore_indices, feature_names)
+        feature_types = remove_indices(ignore_indices, feature_types)
+        feature_strengths = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
+        blocking = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
+        pairwise_uses = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
+
+        self.feature_descriptor = FeatureDescriptor(feature_names, feature_types, feature_strengths, blocking,
+                                                    pairwise_uses)
         # Loop through all the records
         for ad_number, sample in enumerate(ins):
             print 'Extracting sample', ad_number
-            r = Record(ad_number, len(self.feature_names))  # record object from utils
+            r = Record(ad_number, self.feature_descriptor)  # record object from utils
             features = remove_indices(ignore_indices, sample.rstrip('\n').split(','))
-            r.initialize_from_annotation(features, self.feature_types)
+            r.initialize_from_annotation(features)
             self.records[ad_number] = r
             if ad_number >= self._max_records-1:
                 break
-
-    # def get_features(self, record, feature_indices):
-    #     """
-    #     Returns all the requested features from a record
-    #     :param record: Record object
-    #     :return features: Set of all the requested features as strings of form 'feature_name + _ + feature'
-    #     """
-    #     features = set()
-    #     for feature_index in feature_indices:
-    #         feature = record.features[feature_index]
-    #         feature_name = self.feature_names[feature_index]
-    #         for subfeature in feature:
-    #             features.add(feature_name + '_' + str(subfeature))
-    #     return features
 
 
 def remove_indices(remove, lst):
