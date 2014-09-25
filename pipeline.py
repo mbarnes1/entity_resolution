@@ -1,14 +1,13 @@
 from __future__ import division
 import cPickle as pickle  # for saving and loading shit, fast
-from pairwise_features import get_strong_features
 import numpy as np
 import multiprocessing
-from record import Record
 from database import RecordDatabase
 from blocking import BlockingScheme
 from pairwise_features import SurrogateMatchFunction
 from analysis import Analysis
 from copy import deepcopy
+import gc
 
 __author__ = 'mbarnes1'
 
@@ -16,20 +15,19 @@ __author__ = 'mbarnes1'
 def main():
     """
     This creates, runs, evaluates, plots, and saves a Pipeline object.
-    :return: Nothing
     """
     # User Parameters #
-    number_cores = 50
+    number_processes = 50
     max_block_size = 500  # throw away blocks larger than max_block_size
     train_size = 5000
     annotations_path = '/home/scratch/trafficjam/EntityExplorer/Annotations_extended.csv'
     max_records = np.Inf  # number of records to use from database. Set to np.Inf for all records
-    match_type = 'weak'  # weak, strong, or weak_strong (both) matching in Swoosh
+    match_type = 'weak_strong'  # weak, strong, or weak_strong (both) matching in Swoosh
     ###################
 
     pipe = Pipeline(annotations_path, train_size=train_size, match_type=match_type, max_block_size=max_block_size,
                     max_records=max_records)
-    pipe.run(number_cores)
+    pipe.run(number_processes)
     pickle.dump(pipe, open('../../pipe.p', 'wb'))
     pipe.analyze()
     pickle.dump(pipe.analysis, open('../../analysis.p', 'wb'))
@@ -63,9 +61,16 @@ class Pipeline(object):
                 self.resultsqueue.put(swooshed)
             print 'Worker exiting'
 
-    def __init__(self, annotations_path, **kwargs):
+    def __init__(self, features_path, **kwargs):
+        """
+        :param features_path: String, path to the flat features file
+        :param kwargs match_type: Type of matching to perform. String, either 'weak', 'strong', or 'weak_strong'.
+        :param kwargs train_size: Int, number of samples to use in training the weak feature classifier
+        :param kwargs max_block_size: Int, blocks larger than this are thrown away
+        :param kwargs max_records: Int, the number of records to use from features_path. Default all
+        """
         # Required parameters
-        self._annotations_path = annotations_path
+        self._features_path = features_path
 
         # Optional parameters
         self.match_type = kwargs.get('match_type', 'weak_strong')
@@ -86,12 +91,12 @@ class Pipeline(object):
         """
         This is a separate initialization function for large files, and those that depend on them.
         The reason for a separate function is to initialize large files AFTER creating multiprocessing workers,
-        otherwise each new Python instance uses too much memory.
+        otherwise each Python allocates a large amount of memory for new processes
         """
-        self.database = RecordDatabase(self._annotations_path, self._max_records)
-        self.blocking = BlockingScheme(self.database.records, self._max_block_size)
+        self.database = RecordDatabase(self._features_path, self._max_records)
+        self.blocking = BlockingScheme(self.database, self._max_block_size)
         self.strong_clusters = fast_strong_cluster(self.database.records)
-        self.surrogate_match_function = SurrogateMatchFunction(self.database.records, self.blocking.strong_blocks,
+        self.surrogate_match_function = SurrogateMatchFunction(self.database, self.blocking.strong_blocks,
                                                                self._train_size, 0.99)
 
     def analyze(self):
@@ -103,7 +108,7 @@ class Pipeline(object):
         :param cores: The number of processes (i.e. workers) to use
         """
         # Multiprocessing Code
-        #memory_buffer = pickle.load(open('../../blocking.p', 'rb'))  # load large files so workers are initialized with enough memory
+        memory_buffer = pickle.load(open('../../blocking.p', 'rb'))  # so workers are allocated appropriate memory
         jobqueue = multiprocessing.Queue()
         resultsqueue = multiprocessing.Queue()
         workerpool = list()
@@ -111,7 +116,9 @@ class Pipeline(object):
             w = self.Worker(self, jobqueue, resultsqueue)
             workerpool.append(w)
         self._init_large_files()  # initialize large files after creating workers to reduce memory usage by processes
-        for w in workerpool:  # need to initialize large files before starting work
+        memory_buffer = 0  # so nothing points to memory buffer file
+        gc.collect()  # this should delete memory buffer from memory
+        for w in workerpool:  # all files should be initialized before starting work
             w.start()
         records = deepcopy(self.database.records)
 
@@ -176,7 +183,6 @@ class Pipeline(object):
                 swoosheddict[counter] = entity
                 counter += 1
         """
-
         print 'Merging entities...'
         self.entities = merge_duped_records(swoosheddict)
 
@@ -253,7 +259,7 @@ def fast_strong_cluster(records):
     entities = set()  # final output of merged records
     for _, record in records_copy.iteritems():
         ads = record.ads
-        strong_features = get_strong_features(record)
+        strong_features = record.get_features('strong')
         if not strong_features:  # no strong features, insert singular entity
             entities.add(record)
         for strong in strong_features:
@@ -290,11 +296,9 @@ def fast_strong_cluster(records):
                             toexplore.extend(list(ad2strong[connected_ad]))
 
             # Found complete connected component, now do the actual merging
-            merged = Record()
-            mergecounter = 1
+            merged = records_copy[cc.pop()]
             for c in cc:
                 merged.merge(records_copy[c])
-                mergecounter += 1
             entities.add(merged)
         counter += 1
     return entities
@@ -344,11 +348,9 @@ def merge_duped_records(tomerge):
                             toexplore.extend(list(swoosh2ad[connectedswoosh]))  # explore all this node's edges
 
             # Found complete connected component, now do the actual merging
-            merged = Record()
-            mergecounter = 1
+            merged = tomerge[cc.pop()]
             for c in cc:
                 merged.merge(tomerge[c])
-                mergecounter += 1
             entities.add(merged)
         counter += 1
     return entities

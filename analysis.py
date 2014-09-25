@@ -12,7 +12,7 @@ class Analysis(object):
     def __init__(self, pipeline):
         self.number_records = len(pipeline.database.records)
         print 'Evaluating surrogate match function...'
-        self.surrogate_roc = pipeline.surrogate_match_function.test(pipeline.database.records, pipeline._train_size)
+        self.surrogate_roc = pipeline.surrogate_match_function.test(pipeline._train_size)
         print 'Evaluating blocks...'
         self.block_sizes = _get_block_sizes(pipeline.blocking.strong_blocks, pipeline.blocking.weak_blocks)
         self.number_blocks = pipeline.blocking.number_of_blocks()

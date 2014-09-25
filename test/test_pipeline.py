@@ -11,9 +11,9 @@ from copy import deepcopy
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._test_path = 'test_annotations.txt'
+        self._test_path = 'test_annotations.csv'
         self._database = RecordDatabase(self._test_path)
-        self._blocking = BlockingScheme(self._database.records)
+        self._blocking = BlockingScheme(self._database)
         self._pipeline = Pipeline(self._test_path, train_size=6)
         self._pipeline._init_large_files()
 
@@ -74,11 +74,11 @@ class MyTestCase(unittest.TestCase):
         records_copy = deepcopy(self._pipeline.database.records)
         r1 = records_copy[0]
         self.assertEqual(r1, self._pipeline.database.records[0])
-        r1.add_name('Santa Clause')
+        r1.features[0].add('Santa Clause')
         self.assertNotEqual(r1, self._pipeline.database.records[0])
 
     def test_completeness(self):
-        pipe = Pipeline(annotations_path='test_annotations_1000.txt', match_type='strong')
+        pipe = Pipeline('test_annotations_10000.csv', match_type='strong', max_records=1000)
         pipe.run(2)
         pipe.analyze()
         number_fast_strong_records = sum(pipe.analysis.strong_cluster_sizes[:, 0] * pipe.analysis.strong_cluster_sizes[:, 1])

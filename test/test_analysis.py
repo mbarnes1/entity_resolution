@@ -11,8 +11,8 @@ __author__ = 'mbarnes1'
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._test_path = 'test_annotations.txt'
-        self._pipeline = Pipeline(annotations_path=self._test_path, train_size=3, match_type='strong')
+        self._test_path = 'test_annotations.csv'
+        self._pipeline = Pipeline(self._test_path, train_size=3, match_type='strong')
         self._pipeline.run()
         self._analysis = Analysis(self._pipeline)
 
