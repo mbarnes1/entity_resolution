@@ -1,8 +1,6 @@
 import unittest
 import datetime
-import sys
-sys.path.append('../../')
-from entity_resolution.record import Record, FeatureDescriptor, month, get_date
+from record import Record, FeatureDescriptor, month
 __author__ = 'mbarnes1'
 
 
@@ -26,7 +24,7 @@ class MyTestCase(unittest.TestCase):
 
     def test_initialize_from_full_annotation(self):
         self._r0.initialize_from_annotation(self._features_full)
-        self.assertSetEqual(self._r0.ads, {0})
+        self.assertSetEqual(self._r0.line_indices, {0})
         self.assertSetEqual(self._r0.features[0], {9552601})
         self.assertSetEqual(self._r0.features[1], {'neworleans'})
         self.assertSetEqual(self._r0.features[2], {datetime.datetime(2014, 1, 30, 2, 41, 11)})

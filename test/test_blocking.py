@@ -1,9 +1,6 @@
 import unittest
-import sys
-
-sys.path.append('../../')
-from entity_resolution.blocking import BlockingScheme
-from entity_resolution.database import RecordDatabase
+from blocking import BlockingScheme
+from database import Database
 
 __author__ = 'mbarnes1'
 
@@ -11,7 +8,7 @@ __author__ = 'mbarnes1'
 class MyTestCase(unittest.TestCase):
     def setUp(self):
         self._test_path = 'test_annotations.csv'
-        self._database = RecordDatabase(self._test_path)
+        self._database = Database(self._test_path)
 
     def test_full_blocks(self):
         self._blocks = BlockingScheme(self._database)
@@ -27,7 +24,7 @@ class MyTestCase(unittest.TestCase):
         self.assertRaises(KeyError, lambda: self._blocks.strong_blocks['poster_0000001'])
 
     def test_completeness_10000(self):
-        database = RecordDatabase('test_annotations_10000.csv')
+        database = Database('test_annotations_10000.csv')
         blocks = BlockingScheme(database, max_block_size=200)
         used_ads = get_ads(blocks)
         self.assertEqual(used_ads, range(0, len(database.records)))

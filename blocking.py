@@ -2,6 +2,7 @@
 This is the blocking scheme used to make Entity Resolution computationally feasible.
 """
 from itertools import izip
+from copy import copy
 __author__ = 'mbarnes1'
 
 
@@ -17,20 +18,20 @@ class BlockingScheme(object):
         self._generate_strong_blocks(database)
         self._generate_weak_blocks(database)
         self._clean_blocks()
-        self._complete_blocks(len(database.records))
+        self._complete_blocks(database.records.keys())
 
     # Inserts ads that were not blocked or whose block was thrown away
-    def _complete_blocks(self, number_records):
+    def _complete_blocks(self, keys):
         """
         Finds ads missing from blocking scheme (due to sparse features), and ads them as single ads to weak blocks
-        :param number_records: The number of records that should be in the clustering
+        :param keys: List of all the record identifiers that should be in the clustering
         """
         used_ads = set()
         for _, ads in self.strong_blocks.iteritems():
             used_ads.update(ads)
         for _, ads in self.weak_blocks.iteritems():
             used_ads.update(ads)
-        missing_ads = set(range(0, number_records))
+        missing_ads = set(keys)
         missing_ads.difference_update(used_ads)
         for ad in missing_ads:
             block = 'singular_ad_' + str(ad)
@@ -83,13 +84,15 @@ class BlockingScheme(object):
                                                           database.feature_descriptor.blocking)):
                 if (strength == block_strength) & (blocking == 'block'):  # did user specify blocking for this feature?
                     to_block.append(index)
-        for ad, record in database.records.iteritems():  # loop through all the records
-            print block_strength, 'blocking ad', ad
+        for record_id, record in database.records.iteritems():  # loop through all the records
+            if record_id != copy(record.line_indices).pop():
+                print 'Something is wrong'
+            print block_strength, 'blocking ad', record_id
             for index in to_block:
                 feature_name = database.feature_descriptor.names[index]
                 for subfeature in record.features[index]:
                     feature = feature_name + '_' + str(subfeature)
                     if feature in blocks_pointer:
-                        blocks_pointer[feature].add(ad)
+                        blocks_pointer[feature].add(record_id)
                     else:
-                        blocks_pointer[feature] = {ad}
+                        blocks_pointer[feature] = {record_id}

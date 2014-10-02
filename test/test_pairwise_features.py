@@ -1,8 +1,10 @@
 __author__ = 'mbarnes1'
 import unittest
 from pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
-    binary_match
-from database import RecordDatabase
+    binary_match, get_x1, get_x2, _get_pairs
+from pipeline import fast_strong_cluster
+
+from database import Database
 from blocking import BlockingScheme
 import numpy as np
 from math import isnan
@@ -10,9 +12,9 @@ from math import isnan
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._database = RecordDatabase('test_annotations.csv')
+        self._database = Database('test_annotations.csv')
         self._blocking = BlockingScheme(self._database)
-        self._surrogate = SurrogateMatchFunction(self._database, self._blocking.strong_blocks, 6, 0.99)
+        self._surrogate = SurrogateMatchFunction(0.99)
 
     def test_mean_imputation(self):
         x = np.array([[1, 2, 3, 4], [np.NaN, 4, 5, np.NaN], [1, 6, np.NaN, np.NaN]])
@@ -36,10 +38,14 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(self._surrogate.match(r3, r3, 'strong'))
 
     def test_test(self):
-        database = RecordDatabase('test_annotations_10000.csv')
-        blocking = BlockingScheme(database)
-        surrogate = SurrogateMatchFunction(database, blocking.strong_blocks, 50, 0.99)
-        roc = surrogate.test(50)
+        database = Database('test_annotations_10000.csv')
+        database_train = database.sample_and_remove(5000)
+        database_test = database
+        labels_train = fast_strong_cluster(database_train)
+        labels_test = fast_strong_cluster(database_test)
+        surrogate = SurrogateMatchFunction(0.99)
+        surrogate.train(database_train, labels_train, 500)
+        roc = surrogate.test(database_test, labels_test, 500)
         roc.make_plot()
 
     def test_get_x1(self):
@@ -47,16 +53,16 @@ class MyTestCase(unittest.TestCase):
         r1 = self._database.records[1]
         r2 = self._database.records[2]
         r3 = self._database.records[3]
-        self.assertEqual(self._surrogate.get_x1(r0, r3), True)
-        self.assertEqual(self._surrogate.get_x1(r1, r3), True)
-        self.assertEqual(self._surrogate.get_x1(r0, r1), False)
-        self.assertEqual(self._surrogate.get_x1(r0, r2), False)
-        self.assertEqual(self._surrogate.get_x1(r1, r2), False)
-        self.assertEqual(self._surrogate.get_x1(r2, r3), False)
+        self.assertEqual(get_x1(r0, r3), True)
+        self.assertEqual(get_x1(r1, r3), True)
+        self.assertEqual(get_x1(r0, r1), False)
+        self.assertEqual(get_x1(r0, r2), False)
+        self.assertEqual(get_x1(r1, r2), False)
+        self.assertEqual(get_x1(r2, r3), False)
 
     def test_get_x2(self):
         r0 = self._database.records[0]
-        x2 = self._surrogate.get_x2(r0, r0)
+        x2 = get_x2(r0, r0)
         self.assertEqual(x2[0], 1)
         self.assertEqual(x2[1], 0)
         self.assertEqual(x2[2], 1)

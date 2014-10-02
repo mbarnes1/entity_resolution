@@ -8,16 +8,16 @@ class Record(object):
     """
     This object represents a single ad or entity.
     """
-    def __init__(self, ad_number=0, feature_descriptor=0):
+    def __init__(self, line_index=0, feature_descriptor=0):
         """
-        :param ad_number: Unique ad number for identification
+        :param line_index: Unique ad number for identification
         :param feature_descriptor: FeatureDescriptor object
         """
         self.feature_descriptor = feature_descriptor
         self.features = list()
         for _ in range(0, feature_descriptor.number):
             self.features.append(set())
-        self.ads = {ad_number}
+        self.line_indices = {line_index}
 
     def merge(self, r2):
         """
@@ -26,7 +26,7 @@ class Record(object):
         """
         for feature1, feature2 in izip(self.features, r2.features):
             feature1.update(feature2)
-        self.ads.update(r2.ads)
+        self.line_indices.update(r2.line_indices)
 
     def initialize_from_annotation(self, features):
         """
