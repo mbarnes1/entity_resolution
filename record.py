@@ -33,7 +33,7 @@ class Record(object):
         Populates record fields from a single line in a csv file, where commas are used to separate different types of
         features and semicolons (;) are used to separate multiple of the same type of feature (e.g. multiple phone
         numbers)
-        :param features: list of features
+        :param features: list of features. Each feature is a string
         """
         if len(self.features) != len(features):
             raise Exception('Feature dimension mismatch')
@@ -48,6 +48,8 @@ class Record(object):
                         self.features[index].add(f)
                     elif feature_type == 'int':
                         self.features[index].add(int(float(f)))
+                    elif feature_type == 'float':
+                        self.features[index].add(float(f))
                     elif feature_type == 'date':
                         self.features[index].add(get_date(f))
             index += 1
@@ -96,31 +98,12 @@ def get_date(date):
     :param date: String in format 'Thu Jan 30 02:41:11 EST 2014'
     :return time: Datetime object, assuming EST
     """
-    mo = month(date[4:7])  # month
-    d = int(date[8:10])  # day
-    h = int(date[11:13])  # hour
-    mi = int(date[14:16])  # min
-    s = int(date[17:19])  # sec
-    z = date[20:23]  # time zone. Assuming EST for now
-    y = int(date[24:29])  # year
+    y = int(date[0:4])
+    mo = int(date[5:7])
+    d = int(date[8:10])
+    h = int(date[11:13])
+    mi = int(date[14:16])
+    s = int(date[17:19])
     time = datetime.datetime(y, mo, d, h, mi, s)
     return time
-
-
-def month(x):
-    month_dict = {
-        'Jan': 1,
-        'Feb': 2,
-        'Mar': 3,
-        'Apr': 4,
-        'May': 5,
-        'Jun': 6,
-        'Jul': 7,
-        'Aug': 8,
-        'Sep': 9,
-        'Oct': 10,
-        'Nov': 11,
-        'Dec': 12,
-    }
-    return month_dict[x]
 

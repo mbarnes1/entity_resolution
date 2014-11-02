@@ -7,14 +7,14 @@ __author__ = 'mbarnes1'
 class MyTestCase(unittest.TestCase):
     def setUp(self):
         self._features_full = '9552601,neworleans,Thu Jan 30 02:41:11 EST 2014,Louisiana,New Orleans,8,' \
-                              '0,haley,22,60/80/100,66,110,DD,30,26,29,caucasian,white,blue,brunette,' \
+                              '0,haley,22,60/80/100,66,110.5,DD,30,26,29,caucasian,white,blue,brunette,' \
                               'rest_type,rest_ethnicity,res_age,9802534087;5182561877,NC;NY,charlotte;' \
                               'albany,john@smith.com,www.johnsmith.com,johnsmithmedia,' \
                               'Louisiana_2014_1_30_1391067671000_6_0.jpg;Louisiana_2014_1_30_1391067671000_6_1.jpg;' \
                               'Louisiana_2014_1_30_1391067671000_6_2.jpg;Louisiana_2014_1_30_1391067671000_6_3.jpg;' \
                               'Louisiana_2014_1_30_1391067671000_6_4.jpg;Louisiana_2014_1_30_1391067671000_6_5.jpg'
         self._features_full = self._features_full.split(',')
-        feature_types = ('int,string,date,string,string,int,int,string,int,string,int,int,string,int,int,int,'
+        feature_types = ('int,string,date,string,string,int,int,string,int,string,int,float,string,int,int,int,'
                                'string,string,string,string,,,,int,string,string,string,string,string,'
                                'string').split(',')
         feature_descriptor = FeatureDescriptor('', feature_types, '', '', '')
@@ -36,7 +36,7 @@ class MyTestCase(unittest.TestCase):
         self.assertSetEqual(self._r0.features[8], {22})
         self.assertSetEqual(self._r0.features[9], {'60/80/100'})
         self.assertSetEqual(self._r0.features[10], {66})
-        self.assertSetEqual(self._r0.features[11], {110})
+        self.assertSetEqual(self._r0.features[11], {110.5})
         self.assertSetEqual(self._r0.features[12], {'DD'})
         self.assertSetEqual(self._r0.features[13], {30})
         self.assertSetEqual(self._r0.features[14], {26})
