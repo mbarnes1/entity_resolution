@@ -1,5 +1,5 @@
 import unittest
-from metrics import Metrics, _cluster, _intersection_size, _number_pairs, _jaccard
+from metrics import Metrics, _cluster, _intersection_size, _number_pairs, _jaccard, _linearize
 from sklearn import metrics as skmetrics
 import math
 import numpy as np
@@ -8,8 +8,42 @@ __author__ = 'mbarnes1'
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self.labels_pred = [1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 2, 1, 2, 1, 2, 2]
-        self.labels_true = [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+        self.labels_pred = {
+            0: 1,
+            1: 0,
+            2: 1,
+            3: 1,
+            4: 1,
+            5: 1,
+            6: 1,
+            7: 0,
+            8: 0,
+            9: 0,
+            10: 0,
+            11: 2,
+            12: 1,
+            13: 2,
+            14: 1,
+            15: 2,
+            16: 2}
+        self.labels_true = {
+            0: 0,
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+            5: 0,
+            6: 1,
+            7: 1,
+            8: 1,
+            9: 1,
+            10: 1,
+            11: 1,
+            12: 2,
+            13: 2,
+            14: 2,
+            15: 2,
+            16: 2}
         self._n = len(self.labels_pred)
         self.metrics = Metrics(self.labels_true, self.labels_pred)
 
@@ -41,8 +75,9 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(k, (aap*acp)**0.5)
 
     def test_homogeneity_completeness_vmeasure(self):
-        sk_homogeneity, sk_completeness, sk_vmeasure = skmetrics.homogeneity_completeness_v_measure(self.labels_true,
-                                                                                                    self.labels_pred)
+        labels_true, labels_pred = _linearize(self.labels_true, self.labels_pred)
+        sk_homogeneity, sk_completeness, sk_vmeasure = skmetrics.homogeneity_completeness_v_measure(labels_true,
+                                                                                                    labels_pred)
         homogeneity, completeness, vmeasure = self.metrics._homogeneity_completeness_vmeasure(1)
         self.assertEqual(homogeneity, sk_homogeneity)
         self.assertEqual(completeness, sk_completeness)
@@ -86,8 +121,9 @@ class MyTestCase(unittest.TestCase):
         self.assertAlmostEqual(gmd_pairwise_recall, pairwise_recall)
 
     def test_mutual_information(self):
+        labels_true, labels_pred = _linearize(self.labels_true, self.labels_pred)
         mi = self.metrics._mutual_information(self.metrics._clusters_pred, self.metrics._clusters_true)
-        self.assertAlmostEqual(mi, skmetrics.mutual_info_score(self.labels_true, self.labels_pred))
+        self.assertAlmostEqual(mi, skmetrics.mutual_info_score(labels_true, labels_pred))
 
     def test_variation_of_information(self):
         vi = self.metrics._variation_of_information()
@@ -111,7 +147,7 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(np.array_equal(sizes_pred, self.metrics._entity_sizes_pred))
 
     def test_plot(self):
-        self.metrics.make_plots()
+        self.metrics.display()
 
 if __name__ == '__main__':
     unittest.main()

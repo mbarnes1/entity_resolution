@@ -11,15 +11,15 @@ __author__ = 'mbarnes1'
 class Metrics(object):
     def __init__(self, labels_true, labels_pred):
         """
-        :param labels_pred: Predicted cluster label of each sample. Iterable with length n.
-        :param labels_true: True cluster label of each sample. Iterable with length n. Note: these are cluster labels,
-        not class labels. The values do not have to correspond.
+        :param labels_pred: Predicted cluster label of each sample. Dictionary of form [ad id, cluster label]
+        :param labels_true: True cluster label of each sample. Dictionary of form [ad id, cluster label].
+        Note: these are cluster labels, not class labels. The values do not have to correspond.
         """
-        self._labels_pred = labels_pred
-        self._labels_true = labels_true
         self._n = float(len(labels_pred))
-        self._clusters_pred = _cluster(self._labels_pred)
-        self._clusters_true = _cluster(self._labels_true)
+        self._labels_true = labels_true
+        self._labels_pred = labels_pred
+        self._clusters_pred = _cluster(labels_pred)
+        self._clusters_true = _cluster(labels_true)
         self.pairwise_precision, self.pairwise_recall, self.pairwise_f1 = self._pairwise_precision_recall_f1()
         self.cluster_precision, self.cluster_recall, self.cluster_f1 = self._cluster_precision_recall_f1()
         self.closest_cluster_precision, self.closest_cluster_recall, self.closest_cluster_f1 = \
@@ -28,8 +28,8 @@ class Metrics(object):
         self.homogeneity, self.completeness, self.vmeasure = self._homogeneity_completeness_vmeasure()
         self.variation_of_information = self._variation_of_information()
         self.purity = self._purity()
-        self._entity_sizes_pred = _get_entity_sizes(labels_pred)
-        self._entity_sizes_true = _get_entity_sizes(labels_true)
+        self._entity_sizes_pred = _get_entity_sizes(self._clusters_pred)
+        self._entity_sizes_true = _get_entity_sizes(self._clusters_true)
 
     def _pairwise_precision_recall_f1(self):
         """
@@ -96,8 +96,9 @@ class Metrics(object):
         :return completeness:
         :return vmeasure: Weighting of homogeneity and completeness. Harmonic mean when beta=1
         """
-        homogeneity, completeness, vmeasure = sklearn.metrics.homogeneity_completeness_v_measure(self._labels_true,
-                                                                                                 self._labels_pred)
+        linear_true, linear_pred = _linearize(self._labels_true, self._labels_pred)
+        homogeneity, completeness, vmeasure = sklearn.metrics.homogeneity_completeness_v_measure(linear_true,
+                                                                                                 linear_pred)
         return homogeneity, completeness, vmeasure
 
     def global_merge_distance(self, fs, fm, **kwargs):
@@ -186,7 +187,7 @@ class Metrics(object):
         total = float(total)/self._n
         return total
 
-    def make_plots(self):
+    def display(self):
         """
         Make weak feature classifier ROC curve, strong entity sizes, entity sizes, and block sizes figures
         Tries to catch error for when running on server, but it does not work
@@ -212,22 +213,54 @@ class Metrics(object):
             plt.show()
 
 
+def _linearize(labels_a, labels_b):
+    """
+    :param labels_a: Labels of dictionary form [ad id, cluster label]
+    :param labels_b: Labels of dictionary form [ad id, cluster label]
+    :return linear_a: List of cluster labels from labels_a, with list indices matched to linear_b
+    :return linear_b: List of cluster labels from labels_b, with list indices matched to linear_a
+    """
+    linear_a = list()
+    linear_b = list()
+    for id, cluster in labels_a.iteritems():
+        linear_a.append(cluster)
+        linear_b.append(labels_b[id])
+    return linear_a, linear_b
+
+
 def _cluster(labels):
     """
-    :param labels: Cluster labels. Iterable with length n.
-    :return clusters: Frozen set of clusters. Each cluster is a frozen set of ad ids
+    :param labels: Cluster labels of dictionary form [record id, cluster id]
+    :return clusters: Frozen set of clusters. Each cluster is a frozen set of record ids
     """
-    cluster_to_ads = dict()
-    for index, label in enumerate(labels):
-        if label in cluster_to_ads:
-            cluster_to_ads[label].append(index)
+    cluster_to_record = dict()
+    for id, cluster in labels.iteritems():
+        if cluster in cluster_to_record:
+            cluster_to_record[cluster].append(id)
         else:
-            cluster_to_ads[label] = [index]
+            cluster_to_record[cluster] = [id]
     ## Convert to frozen sets
     clusters = set()
-    for _, ads in cluster_to_ads.iteritems():
+    for _, ads in cluster_to_record.iteritems():
         clusters.add(frozenset(ads))
     return frozenset(clusters)
+
+# def _cluster(labels):
+#     """
+#     :param labels: Cluster labels. Iterable with length n.
+#     :return clusters: Frozen set of clusters. Each cluster is a frozen set of ad ids
+#     """
+#     cluster_to_ads = dict()
+#     for index, label in enumerate(labels):
+#         if label in cluster_to_ads:
+#             cluster_to_ads[label].append(index)
+#         else:
+#             cluster_to_ads[label] = [index]
+#     ## Convert to frozen sets
+#     clusters = set()
+#     for _, ads in cluster_to_ads.iteritems():
+#         clusters.add(frozenset(ads))
+#     return frozenset(clusters)
 
 
 def _intersection_size(clusters_estimate, clusters_truth):
@@ -312,20 +345,15 @@ def _get_average_purity(clusters_r, clusters_s):
     return float(total) / n
 
 
-def _get_entity_sizes(labels):
+def _get_entity_sizes(clusters):
     """
     Determines the entity sizes, for plotting
-    :param labels: Dictionary of [identifier, cluster id]
+    :param clusters: Frozen set of clusters, each a frozen set of ad ids
     :return xy: number_bins x 2 array of entity sizes. First column is sorted size, second column is number of occurences
     """
-    cluster_sizes = dict()
-    for cluster in labels:
-        if cluster in cluster_sizes:
-            cluster_sizes[cluster] += 1
-        else:
-            cluster_sizes[cluster] = 1
     size_occurences = dict()
-    for _, size in cluster_sizes.iteritems():
+    for cluster in clusters:
+        size = len(cluster)
         if size in size_occurences:
             size_occurences[size] += 1
         else:
