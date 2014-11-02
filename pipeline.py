@@ -4,22 +4,52 @@ from metrics import Metrics
 __author__ = 'mbarnes'
 
 
+
 def main():
-    regex_path = 'path_to_regex'
-    train_size = 5000
+    regex_path = 'test/test_annotations_10000.csv'
+    train_size = 500
+    test_size = 500
     balancing = True
-    max_block_size = 500
+    max_block_size = 100
     match_type = 'weak_strong'
-    db = Database(regex_path)
-    training = db.sample_and_remove(train_size)
-    testing = db
+    decision_threshold = 0.9
+    db = Database(regex_path, max_records=1000)
+    db_training = db.sample_and_remove(train_size)
+    db_testing = db
     er = EntityResolution()
-    labels_train = fast_strong_cluster(training)
-    labels_test = fast_strong_cluster(testing)
-    weak_match_function = er.train(training, labels_train, train_size, balancing)
-    labels_pred = er.run(testing, match_type, weak_match_function, max_block_size)
+    labels_train = fast_strong_cluster(db_training)
+    labels_test = fast_strong_cluster(db_testing)
+    weak_match_function = er.train(db_training, labels_train, train_size, balancing)
+    labels_pred = er.run(db_testing, weak_match_function, decision_threshold, match_type, max_block_size)
     metrics = Metrics(labels_test, labels_pred)
-    weak_match_function.evaluate(testing, labels_test)
+    _print_metrics(metrics)
+    #metrics.display()
+    roc = weak_match_function.test(db_testing, labels_test, test_size)
+    #roc.make_plot()
+
+
+def _print_metrics(metrics):
+    """
+    Prints metrics to console
+    :param metrics: Metrics object
+    """
+    print 'Pairwise precision:', metrics.pairwise_precision
+    print 'Pairwise recall:', metrics.pairwise_recall
+    print 'Pairwise F1:', metrics.pairwise_f1, '\n'
+    print 'Cluster precision:', metrics.cluster_precision
+    print 'Cluster recall:', metrics.cluster_recall
+    print 'Cluster F1:', metrics.cluster_f1, '\n'
+    print 'Closest cluster preicision:', metrics.closest_cluster_precision
+    print 'Closest cluster recall:', metrics.closest_cluster_recall
+    print 'Closest cluster F1:', metrics.closest_cluster_f1, '\n'
+    print 'Average cluster purity:', metrics.acp
+    print 'Average author purity:', metrics.aap
+    print 'K:', metrics.k, '\n'
+    print 'Homogeneity:', metrics.homogeneity
+    print 'Completeness:', metrics.completeness
+    print 'V-Measure:', metrics.vmeasure, '\n'
+    print 'Variation of Information:', metrics.variation_of_information, '\n'
+    print 'Purity:', metrics.purity
 
 
 def fast_strong_cluster(database):
@@ -34,18 +64,18 @@ def fast_strong_cluster(database):
     cluster_counter = 0
     cluster_labels = dict()
     for _, record in database.records.iteritems():
-        indicies = record.line_indices
+        indices = record.line_indices
         strong_features = record.get_features('strong')
         if not strong_features:  # no strong features, insert singular entity
-            for identifier in indicies:
+            for identifier in indices:
                 cluster_labels[identifier] = cluster_counter
             cluster_counter += 1
         for strong in strong_features:
             if strong in strong2index:
-                strong2index[strong].extend(list(indicies))
+                strong2index[strong].extend(list(indices))
             else:
-                strong2index[strong] = list(indicies)
-            for index in indicies:
+                strong2index[strong] = list(indices)
+            for index in indices:
                 if index in index2strong:
                     index2strong[index].append(strong)
                 else:
