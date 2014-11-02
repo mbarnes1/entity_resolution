@@ -14,11 +14,11 @@ class SurrogateMatchFunction(object):
     """
     The all important match function, named after the surrogate labels it uses for training
     """
-    def __init__(self, decision_threshold):
+    def __init__(self, decision_threshold=1):
         self.x2_mean = []
         self.roc = []
         self.logreg = linear_model.LogisticRegression()
-        self._decision_threshold = decision_threshold
+        self.decision_threshold = decision_threshold
 
     def train(self, database_train, labels_train, number_samples, balancing=True):
         """
@@ -31,7 +31,7 @@ class SurrogateMatchFunction(object):
         x1_train, x2_train, self.x2_mean = _get_pairs(database_train, labels_train, number_samples, balancing)
         self.logreg.fit(x2_train, x1_train)
 
-    def test(self, database_test, labels_test, test_size):
+    def test(self, database_test, labels_test, test_size=1000):
         """
         Get testing samples and test the surrogate match function. Evaluated with ROC curve
         :param database_test: RecordDatabase object
@@ -51,29 +51,34 @@ class SurrogateMatchFunction(object):
         :param r2: Record object
         :param match_type: Match type use in ER algorithm. String 'strong', 'weak', or 'weak_strong'
         :return: False or True, whether r1 and r2 match
+        :return p_x1: Probability of weak match
+        :return strength: Type of matches that occurred. 'strong', 'weak', 'both', or 'none'
         """
         x1 = get_x1(r1, r2)
         if np.isnan(x1):
             x1 = False
-        if match_type == 'strong':  # If only using strong matches, this is easy
-            if x1:
-                return True
-            else:
-                return False
         x2 = get_x2(r1, r2)
         np.copyto(x2, self.x2_mean, where=np.isnan(x2))  # mean imputation
         p_x1 = self.logreg.predict_proba(x2)[0, 1]
-        x1_hat = p_x1 > self._decision_threshold
-        if match_type == 'weak':
-            if x1_hat:
-                return True
+        x1_hat = p_x1 > self.decision_threshold
+        if x1 and x1_hat:
+            strength = 'both'  # both match
+            return True, p_x1, strength
+        elif x1:
+            strength = 'strong'
+            if match_type == 'strong':
+                return True, p_x1, strength
             else:
-                return False
+                return False, p_x1, strength
+        elif x1_hat:
+            strength = 'weak'
+            if match_type == 'weak':
+                return True, p_x1, strength
+            else:
+                return False, p_x1, strength
         else:
-            if x1 or x1_hat:
-                return True
-            else:
-                return False
+            strength = 'none'
+            return False, p_x1, strength
 
 
 def _get_pairs(database, labels_train, number_samples, balancing):

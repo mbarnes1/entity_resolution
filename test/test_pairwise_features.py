@@ -1,11 +1,11 @@
 __author__ = 'mbarnes1'
 import unittest
 from pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
-    binary_match, get_x1, get_x2, _get_pairs
+    binary_match, get_x1, get_x2
 from pipeline import fast_strong_cluster
-
 from database import Database
 from blocking import BlockingScheme
+from entityresolution import EntityResolution
 import numpy as np
 from math import isnan
 
@@ -26,16 +26,23 @@ class MyTestCase(unittest.TestCase):
         r1 = self._database.records[1]
         r2 = self._database.records[2]
         r3 = self._database.records[3]
-        self.assertTrue(self._surrogate.match(r0, r3, 'strong'))
-        self.assertTrue(self._surrogate.match(r1, r3, 'strong'))
-        self.assertFalse(self._surrogate.match(r0, r1, 'strong'))
-        self.assertFalse(self._surrogate.match(r0, r2, 'strong'))
-        self.assertFalse(self._surrogate.match(r1, r2, 'strong'))
-        self.assertFalse(self._surrogate.match(r2, r3, 'strong'))
-        self.assertTrue(self._surrogate.match(r0, r0, 'strong'))
-        self.assertTrue(self._surrogate.match(r1, r1, 'strong'))
-        self.assertTrue(self._surrogate.match(r2, r2, 'strong'))
-        self.assertTrue(self._surrogate.match(r3, r3, 'strong'))
+        labels = {
+            0: 0,
+            1: 0,
+            2: 1,
+            3: 0
+        }
+        self._surrogate.train(self._database, labels, 2)
+        self.assertTrue(self._surrogate.match(r0, r3, 'strong')[0])
+        self.assertTrue(self._surrogate.match(r1, r3, 'strong')[0])
+        self.assertFalse(self._surrogate.match(r0, r1, 'strong')[0])
+        self.assertFalse(self._surrogate.match(r0, r2, 'strong')[0])
+        self.assertFalse(self._surrogate.match(r1, r2, 'strong')[0])
+        self.assertFalse(self._surrogate.match(r2, r3, 'strong')[0])
+        self.assertTrue(self._surrogate.match(r0, r0, 'strong')[0])
+        self.assertTrue(self._surrogate.match(r1, r1, 'strong')[0])
+        self.assertTrue(self._surrogate.match(r2, r2, 'strong')[0])
+        self.assertTrue(self._surrogate.match(r3, r3, 'strong')[0])
 
     def test_test(self):
         database = Database('test_annotations_10000.csv')
