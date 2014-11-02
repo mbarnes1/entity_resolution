@@ -6,32 +6,9 @@ from blocking import BlockingScheme
 from pairwise_features import SurrogateMatchFunction
 from copy import deepcopy
 import gc
-
+from itertools import izip
+import traceback
 __author__ = 'mbarnes1'
-
-
-# def main():
-#     """
-#     This creates, runs, evaluates, plots, and saves a Pipeline object.
-#     """
-#     # User Parameters #
-#     number_processes = 50
-#     max_block_size = 500  # throw away blocks larger than max_block_size
-#     train_size = 5000
-#     annotations_path = '/home/scratch/trafficjam/EntityExplorer/Annotations_extended.csv'
-#     max_records = np.Inf  # number of records to use from database. Set to np.Inf for all records
-#     match_type = 'weak_strong'  # weak, strong, or weak_strong (both) matching in Swoosh
-#     ###################
-#
-#     pipe = EntityResolution(annotations_path, train_size=train_size, match_type=match_type, max_block_size=max_block_size,
-#                     max_records=max_records)
-#     pipe.run(number_processes)
-#     pickle.dump(pipe, open('../../pipe.p', 'wb'))
-#     pipe.analyze()
-#     pickle.dump(pipe.analysis, open('../../analysis.p', 'wb'))
-#     pipe.analysis.print_metrics()
-#     print 'Finished saving all results. Attempting to make plots, this is expected to fail on servers.'
-#     pipe.analysis.make_plots()
 
 
 class EntityResolution(object):
@@ -45,45 +22,39 @@ class EntityResolution(object):
         When finished (determined when sentinel object - None - is queue is processed), clean up with .join()
         """
         def __init__(self, pipeline, jobqueue, resultsqueue):
+            """
+            :param pipeline: Pipeline object that created this worker
+            :param jobqueue: Multiprocessing.Queue() of blocks of records to Swoosh
+            :param resultsqueue: Multiprocessing.Queue() of tuples.
+                                 tuple[0] = Swoosh results, as set of records
+                                 tuple[1] = Decision probabilities, as list of floats in [0, 1]
+                                 tuple[2] = Decision type, as list of strings 'strong', 'weak', 'both', or 'none'
+            """
             super(EntityResolution.Worker, self).__init__()
             self.jobqueue = jobqueue
             self.resultsqueue = resultsqueue
             self._pipeline = pipeline
 
         def run(self):
+            try:
+                self.run_subfunction()
+            except:
+                print('%s' % (traceback.format_exc()))
+
+        def run_subfunction(self):
             print 'Worker started'
             for block in iter(self.jobqueue.get, None):
-                swooshed = self._pipeline.rswoosh(block)
-                if self.resultsqueue.full():
-                    print 'Results queue is full!'
-                self.resultsqueue.put(swooshed)
+                swooshed, decision_list, strength_list = self._pipeline.rswoosh(block)
+                self.resultsqueue.put((swooshed, decision_list, strength_list))
             print 'Worker exiting'
 
-    def __init__(self, decision_threshold):
-        """
-        :param decision_threshold: Threshold for weak feature matching
-        :param features_path: String, path to the flat features file
-        :param kwargs match_type: Type of matching to perform. String, either 'weak', 'strong', or 'weak_strong'.
-        :param kwargs train_size: Int, number of samples to use in training the weak feature classifier
-        :param kwargs max_block_size: Int, blocks larger than this are thrown away
-        :param kwargs max_records: Int, the number of records to use from features_path. Default all
-        """
-        # # Required parameters
-        # self._features_path = features_path
-        #
-        # # Optional parameters
-        # self.match_type = kwargs.get('match_type', 'weak_strong')
-        # self._train_size = kwargs.get('train_size', 5000)
-        # self._max_block_size = kwargs.get('max_block_size', 500)
-        # self._max_records = kwargs.get('max_records', np.Inf)
-
-        ## Initializations
+    def __init__(self):
         self._match_type = None
         self.blocking = None
-        self._weak_matches = 0
-        self._match_function = SurrogateMatchFunction(decision_threshold)
+        self._match_function = SurrogateMatchFunction()
         self.entities = set()
-        self.analysis = None
+        self.decision_prob_list = []  # list of probabilities from attempted matches
+        self.decision_strength_list = []  # list of decision strengths. 'weak', 'strong', 'weak_strong', or 'none'
 
     def train(self, database_train, labels_train, train_size, balancing=True):
         """
@@ -97,31 +68,31 @@ class EntityResolution(object):
         self._match_function.train(database_train, labels_train, train_size, balancing)
         return self._match_function
 
-    # def _init_large_files(self):
-    #     """
-    #     This is a separate initialization function for large files, and those that depend on them.
-    #     The reason for a separate function is to initialize large files AFTER creating multiprocessing workers,
-    #     otherwise each Python allocates a large amount of memory for new processes
-    #     """
-    #     #self.database = Database(self._features_path, self._max_records)
-    #     self.blocking = BlockingScheme(self.database, self._max_block_size)
-    #     #self.surrogate_match_function = SurrogateMatchFunction(self.database, self.blocking.strong_blocks,
-    #     #                                                       self._train_size, 0.99)
-
-    def run(self, database_test, match_function, match_type='weak_strong', max_block_size=np.Inf, cores=2):
+    def run(self, database_test, match_function, decision_threshold, match_type='weak_strong', max_block_size=np.Inf,
+            cores=2):
         """
         This function performs Entity Resolution on all the blocks and merges results to output entities
+        :param database_test: Database object to run on
+        :param match_function: Handle to surrogate match function object. Must have field decision_threshold and
+                               function match(r1, r2, match_type)
+        :param decision_threshold: [0, 1] Probability threshold for weak matches
+        :param match_type: 'weak', 'strong', or 'weak_strong'. weak_strong matches if weak OR strong features match
+        :param max_block_size: Blocks larger than this are thrown away
         :param cores: The number of processes (i.e. workers) to use
         """
         self._match_type = match_type
         self._match_function = match_function
+        self._match_function.decision_threshold = decision_threshold
         # Multiprocessing Code
-        memory_buffer = pickle.load(open('../../blocking.p', 'rb'))  # so workers are allocated appropriate memory
-        jobqueue = multiprocessing.Queue()
-        resultsqueue = multiprocessing.Queue()
+        try:
+            memory_buffer = pickle.load(open('../blocking.p', 'rb'))  # so workers are allocated appropriate memory
+        except:
+            memory_buffer = pickle.load(open('../../blocking.p', 'rb'))  # unit tests
+        job_queue = multiprocessing.Queue()
+        results_queue = multiprocessing.Queue()
         workerpool = list()
         for _ in range(cores):
-            w = self.Worker(self, jobqueue, resultsqueue)
+            w = self.Worker(self, job_queue, results_queue)
             workerpool.append(w)
         #self._init_large_files()  # initialize large files after creating workers to reduce memory usage by processes
         self.blocking = BlockingScheme(database_test, max_block_size)
@@ -137,31 +108,37 @@ class EntityResolution(object):
             index_block = set()
             for index in indices:
                 index_block.add(records[index])
-            jobqueue.put(index_block)
+            job_queue.put(index_block)
         for blockname, indices in self.blocking.weak_blocks.iteritems():
             index_block = set()
             for index in indices:
                 index_block.add(records[index])
-            jobqueue.put(index_block)
+            job_queue.put(index_block)
         for _ in workerpool:
-            jobqueue.put(None)  # Sentinel objects to allow clean shutdown: 1 per worker.
+            job_queue.put(None)  # Sentinel objects to allow clean shutdown: 1 per worker.
 
         # Capture the results
-        resultslist = list()
-        while len(resultslist) < self.blocking.number_of_blocks():
-            resultslist.append(resultsqueue.get())
-            print 'Finished', len(resultslist), 'of', self.blocking.number_of_blocks()
+        results_list = list()
+        while len(results_list) < self.blocking.number_of_blocks():
+            results = results_queue.get()
+            results_list.append(results[0])
+            self.decision_prob_list += results[1]
+            self.decision_strength_list += results[2]
+            print 'Finished', len(results_list), 'of', self.blocking.number_of_blocks()
+        print 'Joining workers'
         for worker in workerpool:
             worker.join()
 
-        # Convert queue of sets to dictionary for final merge
+        # Convert list of sets to dictionary for final merge
+        print 'Converting to dictionary'
         swoosheddict = dict()
         counter = 0
-        for entities in resultslist:
+        for entities in results_list:
             while entities:
                 entity = entities.pop()
                 swoosheddict[counter] = entity
                 counter += 1
+
 
         """ Single-processing
         results = []
@@ -206,13 +183,22 @@ class EntityResolution(object):
         """
         RSwoosh - Benjelloun et al. 2009
         Performs entity resolution on any set of records using merge and match functions
+        :param I: Set of input records
+        :return Inew: Set of resolved entities (records)
+        :return decision_list: List of match and mismatch decision probabilities
+        :return strenght_list: List of decision types
         """
         Inew = set()  # initialize the resolved entities
+        decision_list = []  # probabilities of each match/mismatch decision
+        strength_list = []  # strength of each match. 'weak', 'strong', 'both', or 'none'
         while I:  # until entity resolution is complete
             currentrecord = I.pop()  # an arbitrary record
             buddy = False
             for rnew in Inew:  # iterate over Inew
-                if self._match_function.match(currentrecord, rnew, self._match_type):
+                match, prob, strength = self._match_function.match(currentrecord, rnew, self._match_type)
+                decision_list.append(prob)
+                strength_list.append(strength)
+                if match:
                     buddy = rnew
                     break  # Found a match!
             if buddy:
@@ -221,7 +207,41 @@ class EntityResolution(object):
                 Inew.discard(buddy)
             else:
                 Inew.add(currentrecord)
-        return Inew
+        return Inew, decision_list, strength_list
+
+    def plot_decisions(self):
+        """
+        This function plots a histogram of decision confidences
+        """
+        import matplotlib.pyplot as plt
+        strong_list = []
+        weak_list = []
+        both_list = []
+        none_list = []
+
+        if len(self.decision_prob_list) != len(self.decision_strength_list):
+            raise Exception('List length mismatch')
+        for prob, strength in izip(self.decision_prob_list, self.decision_strength_list):
+            if strength == 'strong':
+                strong_list.append(prob)
+            elif strength == 'weak':
+                weak_list.append(prob)
+            elif strength == 'both':
+                both_list.append(prob)
+            elif strength == 'none':
+                none_list.append(prob)
+            else:
+                raise Exception('Invalid decision type')
+        n, bins, patches = plt.hist([strong_list, weak_list, both_list, none_list], 50, histtype='stepfilled',
+                                    stacked=True) #label=['Strong', 'Weak', 'Both', 'None'])
+        plt.legend()
+        #plt.setp(patches, 'facecolor', 'g', 'alpha', 0.75)
+        plt.xlabel('Match Probability')
+        plt.ylabel('Occurences')
+        plt.title('Match Probability Distribution')
+        plt.show()
+        #except:
+         #   print 'Cannot make plots on server'
 
 
 def merge_duped_records(tomerge):
