@@ -1,15 +1,15 @@
 import unittest
 import sys
 
-sys.path.append('../../')
-from entity_resolution.database import Database, remove_indices, find_in_list
+from database import Synthetic, Database, remove_indices, find_in_list
+import os
 
 __author__ = 'mbarnes1'
 
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._test_path = 'test_annotations.csv'
+        self._test_path = 'test_annotations_cleaned.csv'
 
     def test_remove_indices(self):
         lst = ['one', '', 'two', '', 'three', '']
@@ -35,8 +35,27 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(len(database.records), 4)
 
     def test_max_size(self):
-        database = Database('test_annotations_10000.csv', 409)
+        database = Database('test_annotations_10000_cleaned.csv', 409)
         self.assertEqual(len(database.records), 409)
+
+    def test_synthetic(self):
+        synthetic = Synthetic(10, 10, sigma=0)  # 100 records, 10 entities, 10 records each
+        self.assertEqual(len(synthetic.truth), 100)
+        self.assertEqual(synthetic.truth[0], 0)
+        self.assertEqual(synthetic.truth[99], 9)
+        self.assertEqual(len(synthetic.database.records), 100)
+        self.assertEqual(synthetic.database.records[0].features, synthetic.database.records[1].features)  # line indices won't (and shouldn't) match. Different records
+        self.assertEqual(synthetic.database.records[98].features, synthetic.database.records[98].features)
+        self.assertNotEqual(synthetic.database.records[9].features, synthetic.database.records[10].features)
+        self.assertEqual(synthetic.database.feature_descriptor.number, 10)
+
+    def test_dump(self):
+        database = Database(self._test_path)
+        database.dump('test_annotations_dump.csv')
+        database2 = Database('test_annotations_dump.csv')
+        os.remove('test_annotations_dump.csv')
+        self.assertEqual(database, database2)
+
 
 if __name__ == '__main__':
     unittest.main()

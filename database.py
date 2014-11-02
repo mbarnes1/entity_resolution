@@ -4,6 +4,45 @@ from numpy.random import choice
 __author__ = 'mbarnes1'
 
 
+class Synthetic(object):
+    """
+    Create and corrupt synthetic databases
+    """
+    def __init__(self, number_entities, records_per_entity, sigma=0):
+        """
+        :param number_entities:
+        :param records_per_entity: Mean number of records per entity
+        :param sigma: Standard deviation of records_per_entity
+        """
+        names = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']
+        types = ['float', 'float', 'float', 'float', 'float', 'float', 'float', 'float', 'float', 'float']
+        strengths = ['weak', 'weak', 'weak', 'weak', 'weak', 'weak', 'weak', 'weak', 'weak', 'weak']
+        blocking = ['', '', '', '', '', '', '', '', '', '']
+        pairwise_uses = ['numerical_difference', 'numerical_difference', 'numerical_difference', 'numerical_difference',
+                         'numerical_difference', 'numerical_difference', 'numerical_difference', 'numerical_difference',
+                         'numerical_difference', 'numerical_difference']
+        self.truth = list()
+        self.database = Database()
+        feature_descriptor = FeatureDescriptor(names, types, strengths, blocking, pairwise_uses)
+        self.database.feature_descriptor = feature_descriptor
+        record_index = 0
+        for entity_index in range(0, number_entities):
+            features = np.random.rand(feature_descriptor.number)
+            features = features.astype(str)
+            if sigma:
+                number_records = int(round(np.random.normal(records_per_entity, sigma)))  # number of records for this entity
+            else:
+                number_records = records_per_entity
+            for _ in range(number_records):
+                r = Record(record_index, feature_descriptor)
+                r.initialize_from_annotation(features)
+                self.database.records[record_index] = r
+                record_index += 1
+                self.truth.append(entity_index)
+
+    #def corrupt(self, ):
+
+
 class Database(object):
     """
     A collection of record objects, using a dictionary with [index, record object]
@@ -27,7 +66,6 @@ class Database(object):
             feature_names = next(ins).strip('\n').split(',')  # skip the first line, its a header
             feature_types = next(ins).strip('\n').split(',')  # variable type (e.g. int, string, date)
             ignore_indices = find_in_list(feature_types, '')
-
             feature_names = remove_indices(ignore_indices, feature_names)
             feature_types = remove_indices(ignore_indices, feature_types)
             feature_strengths = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
@@ -60,6 +98,29 @@ class Database(object):
         for line_index in line_indices:
             new_database.records[line_index] = self.records.pop(line_index)
         return new_database
+
+    def dump(self, out_file):
+        """
+        Writes database to csv file
+        :param out_file: String, file name to dump records to
+        """
+        ins = open(out_file, 'w')
+        ins.write(','.join(self.feature_descriptor.names)+'\n')
+        ins.write(','.join(self.feature_descriptor.types)+'\n')
+        ins.write(','.join(self.feature_descriptor.strengths)+'\n')
+        ins.write(','.join(self.feature_descriptor.blocking)+'\n')
+        ins.write(','.join(self.feature_descriptor.pairwise_uses)+'\n')
+        for counter, (_, r) in enumerate(self.records.iteritems()):
+            feature_list = list()
+            for subfeatures in r.features:
+                feature_list.append(';'.join(map(str, subfeatures)))
+            ins.write(','.join(feature_list))
+            if counter < len(self.records):  # no line break on final line
+                ins.write('\n')
+        ins.close()
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 
 def remove_indices(remove, lst):
