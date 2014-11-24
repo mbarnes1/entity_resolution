@@ -4,7 +4,6 @@ from metrics import Metrics
 __author__ = 'mbarnes'
 
 
-
 def main():
     regex_path = 'test/test_annotations_10000.csv'
     train_size = 500

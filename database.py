@@ -1,6 +1,8 @@
 from record import Record, FeatureDescriptor
 import numpy as np
 from numpy.random import choice
+import matplotlib.pyplot as plt
+from itertools import izip
 __author__ = 'mbarnes1'
 
 
@@ -8,20 +10,22 @@ class Synthetic(object):
     """
     Create and corrupt synthetic databases
     """
-    def __init__(self, number_entities, records_per_entity, sigma=0):
+    def __init__(self, number_entities, records_per_entity, number_features=2, sigma=0):
         """
+        Initials synthetic database with 10 features, uniformaly distributed from [0, 1]
+        No initial corruption, so records from the same cluster have exact same features
         :param number_entities:
         :param records_per_entity: Mean number of records per entity
+        :param number_features:
         :param sigma: Standard deviation of records_per_entity
         """
-        names = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten']
-        types = ['float', 'float', 'float', 'float', 'float', 'float', 'float', 'float', 'float', 'float']
-        strengths = ['weak', 'weak', 'weak', 'weak', 'weak', 'weak', 'weak', 'weak', 'weak', 'weak']
-        blocking = ['', '', '', '', '', '', '', '', '', '']
-        pairwise_uses = ['numerical_difference', 'numerical_difference', 'numerical_difference', 'numerical_difference',
-                         'numerical_difference', 'numerical_difference', 'numerical_difference', 'numerical_difference',
-                         'numerical_difference', 'numerical_difference']
-        self.truth = list()
+        indices = range(0, number_features)
+        names = ['Name_{0}'.format(s) for s in indices]
+        types = ['float' for _ in indices]
+        strengths = ['weak' for _ in indices]
+        blocking = ['' for _ in indices]
+        pairwise_uses = ['numerical_difference' for _ in indices]
+        self.labels = dict()  # [record identifier, cluster label]
         self.database = Database()
         feature_descriptor = FeatureDescriptor(names, types, strengths, blocking, pairwise_uses)
         self.database.feature_descriptor = feature_descriptor
@@ -37,10 +41,74 @@ class Synthetic(object):
                 r = Record(record_index, feature_descriptor)
                 r.initialize_from_annotation(features)
                 self.database.records[record_index] = r
+                self.labels[record_index] = entity_index
                 record_index += 1
-                self.truth.append(entity_index)
 
-    #def corrupt(self, ):
+    def sample_and_remove(self, number_samples):
+        """
+        Randomly samles from the database and corresponding labels, removes, and returns them as a new Synthetic object
+        :param number_samples: The number of samples to take
+        :return new_synthetic: New Synthetic object (includes database and labels)
+        """
+        new_synthetic = Synthetic(0, 0)  # empty
+        new_synthetic.database = self.database.sample_and_remove(number_samples)
+        for key, _ in new_synthetic.database.records.iteritems():
+            new_synthetic.labels[key] = self.labels.pop(key)
+        return new_synthetic
+
+    def corrupt(self, corruption):
+        """
+        Added corruption to features
+        :param corruption: List of feature corruption vectors for each record
+        """
+        for corrupt, (_, record) in izip(corruption, self.database.records.iteritems()):
+            features = np.array([feature.pop() for feature in record.features])
+            features += corrupt
+            feature_set = [{feature} for feature in features]
+            record.features = feature_set
+
+    def plot(self, labels, title='Feature Distribution', color_seed=None, ax=None):
+        """
+        Plots 2D features for visualization
+        :param labels: Dictionary of [record id, predicted label]
+        :param title: String, title for the plot
+        :param color_seed: List of colors for each record. Cluster color is color of the earliest record in list. If none, randomly generates colors
+        :param ax: Axis to plot on
+        """
+        if self.database.feature_descriptor.number != 2:
+            raise Exception('Can only plot 2D features')
+        x1 = list()
+        x2 = list()
+        label_to_color = dict()
+        color_list = list()
+        if not ax:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+        print '****', title, '****'
+        for counter, (idx, record) in enumerate(self.database.records.iteritems()):
+            print 'Key:', idx
+            label = labels[idx]
+            print 'Label', label
+            if label not in label_to_color:
+                label_to_color[label] = np.random.rand() if color_seed is None else color_seed[counter]
+                print 'Added new label color'
+            (_x1,) = record.features[0]  # should only be one element in set
+            (_x2,) = record.features[1]  # should only be one element in set
+            print 'x1:', _x1
+            print 'x2:', _x2
+            x1.append(_x1)
+            x2.append(_x2)
+            color_list.append(label_to_color[label])
+            print 'Color:', label_to_color[label]
+            #ax.scatter(_x1, _x2, s=50, c=label_to_color[label])
+        ax.scatter(x1, x2, s=100, c=color_list, alpha=1.0)
+        ax.set_title(title)
+        print 'x1:', x1
+        print 'x2:', x2
+        print 'Colors:', color_list
+
+        ax.axis([-0.2, 1.2, -0.2, 1.2])
+        #plt.show()
 
 
 class Database(object):
@@ -88,7 +156,7 @@ class Database(object):
 
     def sample_and_remove(self, number_samples):
         """
-        Randomly samples from the database, removes, and returns them as a new database
+        Randomly samples from the database, removes, and returns them as a new Database object
         :param number_samples: The number of samples to take
         :return new_database: Database created from samples
         """

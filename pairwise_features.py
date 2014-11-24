@@ -20,15 +20,18 @@ class SurrogateMatchFunction(object):
         self.logreg = linear_model.LogisticRegression()
         self.decision_threshold = decision_threshold
 
-    def train(self, database_train, labels_train, number_samples, balancing=True):
+    def train(self, database_train, labels_train, number_samples, balancing=True, pair_seed=None):
         """
         Get training samples and trains the surrogate match function
         :param database_train: Training database
         :param labels_train: Dictionary of [identier, cluster label]
         :param number_samples: Number of samples to use in training
         :param balancing: Boolean, whether to balance match/mismatch classes
+        :param pair_seed: List of pairs to use. Otherwise random
+        :return pairs: Set of pairs. Each pair is a list with two entries, the two ad identifiers
         """
-        x1_train, x2_train, self.x2_mean = _get_pairs(database_train, labels_train, number_samples, balancing)
+        x1_train, x2_train, self.x2_mean, pairs = get_pairs(database_train, labels_train, number_samples, balancing,
+                                                            pair_seed=pair_seed)
         self.logreg.fit(x2_train, x1_train)
 
     def test(self, database_test, labels_test, test_size=1000):
@@ -38,7 +41,7 @@ class SurrogateMatchFunction(object):
         :param test_size: Number of pairwise samples to use in testing
         :return RocCurve: An RocCurve object
         """
-        x1_test, x2_test, _ = _get_pairs(database_test, labels_test, test_size, True)
+        x1_test, x2_test, _, _ = get_pairs(database_test, labels_test, test_size, True)
         x1_bar_probability = self.logreg.predict_proba(x2_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))
         #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
@@ -81,69 +84,84 @@ class SurrogateMatchFunction(object):
             return False, p_x1, strength
 
 
-def _get_pairs(database, labels_train, number_samples, balancing):
+def get_pairs(database, labels_train, number_samples, balancing, pair_seed=None):
     """
     Randomly samples pairs of records, without replacement.
-    Can balance classes, approximated by a strong feature match.
+    Can balance classes, using labels_train
     :param database: Database object to sample from
     :param labels_train: Cluster labels of the dictionary form [identifier, cluster label]
     :param number_samples: Number of samples to return
     :param balancing: Boolean, whether to balance match/mismatch classes
+    :param pair_seed: (Optional) pairs to use. Otherwise generates randomly
     :return x1: Vector of strong features, values takes either 0 or 1
     :return x2: n x m Matrix of weak features, where n is number_samples and m is number of weak features
     :return m: Mean imputation vector of weak features, 1 x number of weak features
+    :return pairs: A list of pairs, each pair being a 1D vector w/ two entries, the identifiers of each record
     """
+    if len(database.records)*(len(database.records)-1)/2 < number_samples:
+        raise Exception('Number of requested pairs exceeds number of pairs available in database')
+    if pair_seed is not None:
+        if number_samples > len(pair_seed):
+            raise Exception('Number of requested pairs exceeds length of seed')
     line_indices = database.records.keys()
     x1 = list()
     x2 = list()
-    pairs = set()
-    cluster_to_records = dict()
-    for index, cluster in labels_train.iteritems():
-        if cluster in cluster_to_records:
-            cluster_to_records[cluster].append(index)
-        else:
-            cluster_to_records[cluster] = [index]
-    cluster_keys = cluster_to_records.keys()
-    cluster_sizes = []  # probability of randomly selecting a pair from a cluster
-    number_pairs = 0
-    for key in cluster_keys:
-        records = cluster_to_records[key]
-        cluster_pairs = float(len(records))*(len(records)-1)/2
-        cluster_sizes.append(cluster_pairs)
-        number_pairs += cluster_pairs
-    cluster_prob = [size/number_pairs for size in cluster_sizes]
-    while len(x1) < number_samples:
-        to_balance = random.choice([True, False])
-        if balancing and to_balance:
-            cluster = choice(cluster_keys, p=cluster_prob)
-            pair = None
-            while not pair:
-                pair = tuple(choice(cluster_to_records[cluster], size=2, replace=False))
-                pair_flipped = (pair[1], pair[0])
-                if (pair[0] != pair[1]) and \
-                        (pair not in pairs) and \
-                        (pair_flipped not in pairs):  # valid pair, not used before
-                    pairs.add(pair)
-        else:
-            pair = None
-            while not pair:
-                pair = tuple(choice(line_indices, size=2, replace=False))
-                pair_flipped = (pair[1], pair[0])
-                if (labels_train[pair[0]] != labels_train[pair[1]]) and \
-                        (pair[0] != pair[1]) and \
-                        (pair not in pairs) and \
-                        (pair_flipped not in pairs):  # not in cluster, valid pair, not used before
-                    pairs.add(pair)
+    if pair_seed is None:  # randomly draw new pairs
+        pairs = set()
+        cluster_to_records = dict()
+        for index, cluster in labels_train.iteritems():
+            if cluster in cluster_to_records:
+                cluster_to_records[cluster].append(index)
+            else:
+                cluster_to_records[cluster] = [index]
+        cluster_keys = cluster_to_records.keys()
+        cluster_sizes = []  # probability of randomly selecting a pair from a cluster
+        number_pairs = 0
+        for key in cluster_keys:
+            records = cluster_to_records[key]
+            cluster_pairs = float(len(records))*(len(records)-1)/2
+            cluster_sizes.append(cluster_pairs)
+            number_pairs += cluster_pairs
+        cluster_prob = [size/number_pairs for size in cluster_sizes]
+        while len(pairs) < number_samples:
+            to_balance = random.choice([True, False])
+            if balancing and to_balance:
+                cluster = choice(cluster_keys, p=cluster_prob)
+                pair = None
+                while not pair:
+                    pair = tuple(choice(cluster_to_records[cluster], size=2, replace=False))
+                    pair_flipped = (pair[1], pair[0])
+                    if (pair[0] != pair[1]) and \
+                            (pair not in pairs) and \
+                            (pair_flipped not in pairs):  # valid pair, not used before
+                        pairs.add(pair)
+            else:
+                pair = None
+                while not pair:
+                    pair = tuple(choice(line_indices, size=2, replace=False))
+                    pair_flipped = (pair[1], pair[0])
+                    if (labels_train[pair[0]] != labels_train[pair[1]]) and \
+                            (pair[0] != pair[1]) and \
+                            (pair not in pairs) and \
+                            (pair_flipped not in pairs):  # not in cluster, valid pair, not used before
+                        pairs.add(pair)
+        pairs = list(pairs)
+    else:  # use pair seed
+        if number_samples > len(pair_seed):
+            raise Exception('Number requested samples larger than seed')
+        pairs = pair_seed[:number_samples]
+    for pair in pairs:
         r1 = database.records[pair[0]]
         r2 = database.records[pair[1]]
-        _x1 = get_x1(r1, r2)
-        if _x1 != np.NaN:  # are there strong features in both ads?
-            x1.append(_x1)
-            x2.append(get_x2(r1, r2))
+        c1 = labels_train[next(iter(r1.line_indices))]  # cluster r1 belongs to
+        c2 = labels_train[next(iter(r2.line_indices))]  # cluster r2 belongs to
+        _x1 = int(c1 == c2)
+        x1.append(_x1)
+        x2.append(get_x2(r1, r2))
     x1 = np.asarray(x1)
     x2 = np.asarray(x2)
     m = mean_imputation(x2)
-    return x1, x2, m
+    return x1, x2, m, pairs
 
 
 def get_x2(r1, r2):

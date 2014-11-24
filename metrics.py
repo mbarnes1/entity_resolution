@@ -39,12 +39,14 @@ class Metrics(object):
         :return pairwise_f1: Pairwise F1, a float [0, 1]
         """
         pairwise_intersection_size = float(_intersection_size(self._clusters_pred, self._clusters_true))
-        pairwise_precision = pairwise_intersection_size / _number_pairs(self._clusters_pred)
-        pairwise_recall = pairwise_intersection_size / _number_pairs(self._clusters_true)
-        beta = 1
-        pairwise_f1 = (1 + beta ** 2) * pairwise_precision * pairwise_recall / (
+        pairwise_precision = pairwise_intersection_size / _number_pairs(self._clusters_pred) if \
+            _number_pairs(self._clusters_pred) else 1.0
+        pairwise_recall = pairwise_intersection_size / _number_pairs(self._clusters_true) if \
+            _number_pairs(self._clusters_true) else 0.0
+        beta = 1.0
+        pairwise_f1 = (1.0 + beta ** 2.0) * pairwise_precision * pairwise_recall / (
             (beta ** 2) * pairwise_precision + pairwise_recall) if \
-            pairwise_precision or pairwise_recall else 0
+            pairwise_precision or pairwise_recall else 0.0
         return pairwise_precision, pairwise_recall, pairwise_f1
 
     def _cluster_precision_recall_f1(self):
@@ -57,9 +59,9 @@ class Metrics(object):
         cluster_precision = float(len(self._clusters_pred & self._clusters_true)) / len(self._clusters_pred)
         cluster_recall = float(len(self._clusters_pred & self._clusters_true)) / len(self._clusters_true)
         beta = 1
-        cluster_f1 = (1 + beta ** 2) * cluster_precision * cluster_recall / (
-            (beta ** 2) * cluster_precision + cluster_recall) if \
-            cluster_precision or cluster_recall else 0
+        cluster_f1 = (1.0 + beta ** 2.0) * cluster_precision * cluster_recall / (
+            (beta ** 2.0) * cluster_precision + cluster_recall) if \
+            cluster_precision or cluster_recall else 0.0
         return cluster_precision, cluster_recall, cluster_f1
 
     def _closest_cluster_precision_recall_f1(self):

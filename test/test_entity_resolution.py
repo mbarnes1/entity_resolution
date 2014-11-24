@@ -9,15 +9,16 @@ from copy import deepcopy
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._test_path = 'test_annotations.csv'
+        self._test_path = 'test_annotations_cleaned.csv'
         self._database = Database(self._test_path)
         self._labels = fast_strong_cluster(self._database)
         self._blocking = BlockingScheme(self._database)
         self._er = EntityResolution()
+        self._er._match_type = 'strong'
         self._match_function = self._er.train(self._database, self._labels, 10, True)
 
     def test_run(self):
-        self._er.run(self._database, self._match_function, 0.99, cores=2)
+        self._er.run(self._database, self._match_function, 0.99, 'strong', cores=2)
         r0 = self._database.records[0]
         r1 = self._database.records[1]
         r2 = self._database.records[2]
@@ -33,7 +34,7 @@ class MyTestCase(unittest.TestCase):
         r2 = self._database.records[2]
         r3 = self._database.records[3]
         records = {r0, r1, r2, r3}
-        swooshed = self._er.rswoosh(records)
+        (swooshed, _, _) = self._er.rswoosh(records)
         r1.merge(r3)
         r0.merge(r1)
         merged = {r0, r2}
@@ -46,7 +47,7 @@ class MyTestCase(unittest.TestCase):
         r2 = self._database.records[2]
         r3 = self._database.records[3]
         records = {r0, r1, r2, r3}
-        swooshed = self._er.rswoosh(records)
+        (swooshed, _, _) = self._er.rswoosh(records)
         r0.merge(r1)
         r1.merge(r3)
         r3.merge(r0)
@@ -66,14 +67,14 @@ class MyTestCase(unittest.TestCase):
         self.assertNotEqual(r1, self._database.records[0])
 
     def test_completeness(self):
-        database = Database('test_annotations_10000.csv', max_records=1000)
+        database = Database('test_annotations_10000_cleaned.csv', max_records=1000)
         database_train = database.sample_and_remove(500)
         database_test = database
         labels_train = fast_strong_cluster(database_train)
         labels_test = fast_strong_cluster(database_test)
         er = EntityResolution()
         match_function = er.train(database_train, labels_train, 1000, True)
-        labels_pred = er.run(database_test, match_function, 0.99, cores=2)
+        labels_pred = er.run(database_test, match_function, 0.99, 'strong', cores=2)
         number_fast_strong_records = len(labels_train) + len(labels_test)
         self.assertEqual(number_fast_strong_records, 1000)
         self.assertEqual(sorted((labels_train.keys() + labels_test.keys())), range(0, 1000))
@@ -81,15 +82,15 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(number_swoosh_records, len(database_test.records))
         self.assertEqual(get_ids(er.entities), sorted(labels_test.keys()))
 
-    def test_decision_plot(self):
-        database = Database('test_annotations_10000.csv', max_records=1000)
-        db_train = database.sample_and_remove(500)
-        db_test = database
-        labels_train = fast_strong_cluster(db_train)
-        er = EntityResolution()
-        weak_match_function = er.train(db_train, labels_train, 1000, True)
-        er.run(db_test, weak_match_function, 0.99, 'strong', max_block_size=50)
-        er.plot_decisions()
+    # def test_decision_plot(self):
+    #     database = Database('test_annotations_10000_cleaned.csv', max_records=1000)
+    #     db_train = database.sample_and_remove(500)
+    #     db_test = database
+    #     labels_train = fast_strong_cluster(db_train)
+    #     er = EntityResolution()
+    #     weak_match_function = er.train(db_train, labels_train, 1000, True)
+    #     er.run(db_test, weak_match_function, 0.99, 'strong', max_block_size=50)
+    #     er.plot_decisions()
 
 
 # Returns a sorted list of all the ids in an iterable of records, in ascending order

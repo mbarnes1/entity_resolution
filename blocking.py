@@ -1,24 +1,30 @@
 """
 This is the blocking scheme used to make Entity Resolution computationally feasible.
 """
+import numpy as np
 from itertools import izip
 from copy import copy
 __author__ = 'mbarnes1'
 
 
 class BlockingScheme(object):
-    def __init__(self, database, max_block_size=float('inf')):
+    def __init__(self, database, max_block_size=np.Inf, single_block=False):
         """
         :param database: RecordDatabase object
         :param max_block_size: Integer. Blocks larger than this are thrown away (not informative & slow to process))
+        :param single_block: Boolean, if True puts all records into a single weak block
         """
         self._max_block_size = max_block_size
         self.strong_blocks = dict()
         self.weak_blocks = dict()
-        self._generate_strong_blocks(database)
-        self._generate_weak_blocks(database)
-        self._clean_blocks()
-        self._complete_blocks(database.records.keys())
+        if not single_block:
+            self._generate_strong_blocks(database)
+            self._generate_weak_blocks(database)
+            self._clean_blocks()
+            self._complete_blocks(database.records.keys())
+        else:
+            self._max_block_size = np.Inf
+            self.weak_blocks['All'] = set(database.records.keys())
 
     # Inserts ads that were not blocked or whose block was thrown away
     def _complete_blocks(self, keys):
@@ -85,8 +91,6 @@ class BlockingScheme(object):
                 if (strength == block_strength) & (blocking == 'block'):  # did user specify blocking for this feature?
                     to_block.append(index)
         for record_id, record in database.records.iteritems():  # loop through all the records
-            if record_id != copy(record.line_indices).pop():
-                print 'Something is wrong'
             print block_strength, 'blocking ad', record_id
             for index in to_block:
                 feature_name = database.feature_descriptor.names[index]

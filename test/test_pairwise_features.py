@@ -1,20 +1,34 @@
 __author__ = 'mbarnes1'
 import unittest
 from pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
-    binary_match, get_x1, get_x2
+    binary_match, get_x1, get_x2, get_pairs
 from pipeline import fast_strong_cluster
 from database import Database
 from blocking import BlockingScheme
-from entityresolution import EntityResolution
 import numpy as np
 from math import isnan
 
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._database = Database('test_annotations.csv')
+        self._database = Database('test_annotations_cleaned.csv')
         self._blocking = BlockingScheme(self._database)
         self._surrogate = SurrogateMatchFunction(0.99)
+
+    def test_get_pairs(self):
+        database = Database('test_annotations_10000_cleaned.csv')
+        labels = fast_strong_cluster(database)
+        pair_seed = np.random.randint(0, 10000, (10, 2))
+        # x1_a, x2_a, m_a = _get_pairs(database, labels, 10, balancing=True)
+        # x1_b, x2_b, m_b = _get_pairs(database, labels, 10, balancing=True)
+        # self.assertNotEqual(x1_a, x1_b)
+        # self.assertNotEqual(x2_a, x2_b)
+        # self.assertNotEqual(m_a, m_b)
+        x1_a, x2_a, m_a, pairs = get_pairs(database, labels, 10, balancing=True, pair_seed=pair_seed)
+        x1_b, x2_b, m_b, pairs = get_pairs(database, labels, 10, balancing=True, pair_seed=pair_seed)
+        np.testing.assert_array_equal(x1_a, x1_b)
+        np.testing.assert_array_equal(x2_a, x2_b)
+        np.testing.assert_array_equal(m_a, m_b)
 
     def test_mean_imputation(self):
         x = np.array([[1, 2, 3, 4], [np.NaN, 4, 5, np.NaN], [1, 6, np.NaN, np.NaN]])
@@ -45,7 +59,7 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(self._surrogate.match(r3, r3, 'strong')[0])
 
     def test_test(self):
-        database = Database('test_annotations_10000.csv')
+        database = Database('test_annotations_10000_cleaned.csv')
         database_train = database.sample_and_remove(5000)
         database_test = database
         labels_train = fast_strong_cluster(database_train)

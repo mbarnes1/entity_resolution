@@ -56,20 +56,21 @@ class EntityResolution(object):
         self.decision_prob_list = []  # list of probabilities from attempted matches
         self.decision_strength_list = []  # list of decision strengths. 'weak', 'strong', 'weak_strong', or 'none'
 
-    def train(self, database_train, labels_train, train_size, balancing=True):
+    def train(self, database_train, labels_train, train_size, balancing=True, pair_seed=None):
         """
         Trains the match function used in the entity resolution process
         :param database_train: Database object of samples used for training
         :param labels_train: Dictionary of [line index, cluster label]
         :param train_size: Number of pairs to use in training
         :param balancing: Boolean, whether to balance classes
+        :param pair_seed: List of record pairs to use
         :return match_function: Logistic Regression object
         """
-        self._match_function.train(database_train, labels_train, train_size, balancing)
+        self._match_function.train(database_train, labels_train, train_size, balancing, pair_seed=pair_seed)
         return self._match_function
 
-    def run(self, database_test, match_function, decision_threshold, match_type='weak_strong', max_block_size=np.Inf,
-            cores=2):
+    def run(self, database_test, match_function, decision_threshold, match_type, max_block_size=np.Inf,
+            single_block=False, cores=1):
         """
         This function performs Entity Resolution on all the blocks and merges results to output entities
         :param database_test: Database object to run on
@@ -78,16 +79,18 @@ class EntityResolution(object):
         :param decision_threshold: [0, 1] Probability threshold for weak matches
         :param match_type: 'weak', 'strong', or 'weak_strong'. weak_strong matches if weak OR strong features match
         :param max_block_size: Blocks larger than this are thrown away
+        :param single_block: If True, puts all records into single large weak block (only OK for small databases)
         :param cores: The number of processes (i.e. workers) to use
         """
         self._match_type = match_type
         self._match_function = match_function
         self._match_function.decision_threshold = decision_threshold
-        # Multiprocessing Code
-        try:
-            memory_buffer = pickle.load(open('../blocking.p', 'rb'))  # so workers are allocated appropriate memory
-        except:
-            memory_buffer = pickle.load(open('../../blocking.p', 'rb'))  # unit tests
+        # Multiprocessing code
+        if cores > 1:  # large job, use memory bufffer
+            try:
+                memory_buffer = pickle.load(open('../blocking.p', 'rb'))  # so workers are allocated appropriate memory
+            except:
+                memory_buffer = pickle.load(open('../../blocking.p', 'rb'))  # unit tests
         job_queue = multiprocessing.Queue()
         results_queue = multiprocessing.Queue()
         workerpool = list()
@@ -95,10 +98,11 @@ class EntityResolution(object):
             w = self.Worker(self, job_queue, results_queue)
             workerpool.append(w)
         #self._init_large_files()  # initialize large files after creating workers to reduce memory usage by processes
-        self.blocking = BlockingScheme(database_test, max_block_size)
+        self.blocking = BlockingScheme(database_test, max_block_size, single_block=single_block)
 
         memory_buffer = 0  # so nothing points to memory buffer file
-        gc.collect()  # this should delete memory buffer from memory
+        if cores > 1:
+            gc.collect()  # this should delete memory buffer from memory
         for w in workerpool:  # all files should be initialized before starting work
             w.start()
         records = deepcopy(database_test.records)
@@ -185,8 +189,8 @@ class EntityResolution(object):
         Performs entity resolution on any set of records using merge and match functions
         :param I: Set of input records
         :return Inew: Set of resolved entities (records)
-        :return decision_list: List of match and mismatch decision probabilities
-        :return strenght_list: List of decision types
+        :return decision_list: List of decision probabilities
+        :return strength_list: List of decision type ('strong', 'weak', 'both', 'none')
         """
         Inew = set()  # initialize the resolved entities
         decision_list = []  # probabilities of each match/mismatch decision
@@ -209,39 +213,39 @@ class EntityResolution(object):
                 Inew.add(currentrecord)
         return Inew, decision_list, strength_list
 
-    def plot_decisions(self):
-        """
-        This function plots a histogram of decision confidences
-        """
-        import matplotlib.pyplot as plt
-        strong_list = []
-        weak_list = []
-        both_list = []
-        none_list = []
-
-        if len(self.decision_prob_list) != len(self.decision_strength_list):
-            raise Exception('List length mismatch')
-        for prob, strength in izip(self.decision_prob_list, self.decision_strength_list):
-            if strength == 'strong':
-                strong_list.append(prob)
-            elif strength == 'weak':
-                weak_list.append(prob)
-            elif strength == 'both':
-                both_list.append(prob)
-            elif strength == 'none':
-                none_list.append(prob)
-            else:
-                raise Exception('Invalid decision type')
-        n, bins, patches = plt.hist([strong_list, weak_list, both_list, none_list], 50, histtype='stepfilled',
-                                    stacked=True) #label=['Strong', 'Weak', 'Both', 'None'])
-        plt.legend()
-        #plt.setp(patches, 'facecolor', 'g', 'alpha', 0.75)
-        plt.xlabel('Match Probability')
-        plt.ylabel('Occurences')
-        plt.title('Match Probability Distribution')
-        plt.show()
-        #except:
-         #   print 'Cannot make plots on server'
+    # def plot_decisions(self):
+    #     """
+    #     This function plots a histogram of decision confidences
+    #     """
+    #     import matplotlib.pyplot as plt
+    #     strong_list = []
+    #     weak_list = []
+    #     both_list = []
+    #     none_list = []
+    #
+    #     if len(self.decision_prob_list) != len(self.decision_strength_list):
+    #         raise Exception('List length mismatch')
+    #     for prob, strength in izip(self.decision_prob_list, self.decision_strength_list):
+    #         if strength == 'strong':
+    #             strong_list.append(prob)
+    #         elif strength == 'weak':
+    #             weak_list.append(prob)
+    #         elif strength == 'both':
+    #             both_list.append(prob)
+    #         elif strength == 'none':
+    #             none_list.append(prob)
+    #         else:
+    #             raise Exception('Invalid decision type')
+    #     n, bins, patches = plt.hist([strong_list, weak_list, both_list, none_list], 50, histtype='stepfilled')
+    #                                 #stacked=True) #label=['Strong', 'Weak', 'Both', 'None'])
+    #     plt.legend()
+    #     #plt.setp(patches, 'facecolor', 'g', 'alpha', 0.75)
+    #     plt.xlabel('Match Probability')
+    #     plt.ylabel('Occurences')
+    #     plt.title('Match Probability Distribution')
+    #     plt.show()
+    #     #except:
+    #      #   print 'Cannot make plots on server'
 
 
 def merge_duped_records(tomerge):
