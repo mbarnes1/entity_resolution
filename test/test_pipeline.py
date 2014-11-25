@@ -9,7 +9,7 @@ __author__ = 'mbarnes1'
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._test_path = 'test_annotations.csv'
+        self._test_path = 'test_annotations_cleaned.csv'
         self._database = Database(self._test_path)
         self._blocking = BlockingScheme(self._database)
         self._er = EntityResolution()
@@ -25,7 +25,7 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(labels_pred, labels_true)
 
     def test_fast_strong_cluster_large(self):
-        database = Database('test_annotations_10000.csv', max_records=1000)
+        database = Database('test_annotations_10000_cleaned.csv', max_records=1000)
         database_train = database.sample_and_remove(500)
         database_test = database
         labels_train = fast_strong_cluster(database_train)

@@ -2,7 +2,7 @@ __author__ = 'mbarnes1'
 from database import Synthetic
 from copy import deepcopy
 from entityresolution import EntityResolution
-from pairwise_features import get_pairs
+from pairwise_features import get_pairwise_features, generate_pair_seed
 from itertools import izip
 import numpy as np
 from metrics import Metrics
@@ -39,7 +39,7 @@ class SyntheticExperiment(object):
             self._axes.append([ax1])
             pairwise_f1 = list()
             for threshold_index, threshold in enumerate(experiment.thresholds):
-                pairwise_f1.append(experiment.metrics[threshold_index][self._corruption_index].pairwise_f1)
+                pairwise_f1.append(experiment.metrics[self._corruption_index][threshold_index].pairwise_f1)
             self.pf1, = ax1.plot(experiment.thresholds, pairwise_f1)
             self.pf1_dot, = ax1.plot(experiment.thresholds[self._threshold_index], pairwise_f1[self._threshold_index],
                                      'bo', markersize=10, label='Operating Point')
@@ -62,7 +62,7 @@ class SyntheticExperiment(object):
                                                                    color_seed=self._color_seed, ax=self._axes[1][0])
 
             # plot predicted cluster
-            predicted_labels = experiment.predicted_labels[self._threshold_index][self._corruption_index]
+            predicted_labels = experiment.predicted_labels[self._corruption_index][self._threshold_index]
             experiment.synthetic_test[self._corruption_index].plot(predicted_labels, title='Predicted Clustering',
                                                                    color_seed=self._color_seed, ax=self._axes[1][1])
             
@@ -82,7 +82,7 @@ class SyntheticExperiment(object):
             corruption_index = int(np.floor(self.sframe.val))
             if corruption_index != self._corruption_index:
                 true_labels = self._experiment.uncorrupted_synthetic_test.labels
-                predicted_labels = self._experiment.predicted_labels[self._threshold_index][corruption_index]
+                predicted_labels = self._experiment.predicted_labels[corruption_index][self._threshold_index]
                 self._axes[1][0].clear()
                 self._axes[1][1].clear()
                 self._experiment.synthetic_test[corruption_index].plot(true_labels, title='True Clustering',
@@ -91,7 +91,7 @@ class SyntheticExperiment(object):
                                                                        color_seed=self._color_seed, ax=self._axes[1][1])
                 pairwise_f1 = list()
                 for threshold_index, threshold in enumerate(self._experiment.thresholds):
-                    pairwise_f1.append(self._experiment.metrics[threshold_index][corruption_index].pairwise_f1)
+                    pairwise_f1.append(self._experiment.metrics[corruption_index][threshold_index].pairwise_f1)
                 self.pf1.set_ydata(pairwise_f1)
                 self.pf1_dot.set_ydata(pairwise_f1[self._threshold_index])
                 self._figures[0].canvas.draw()
@@ -102,7 +102,7 @@ class SyntheticExperiment(object):
             threshold_index = int(np.floor(self.sframe2.val))
             if threshold_index != self._threshold_index:
                 true_labels = self._experiment.uncorrupted_synthetic_test.labels
-                predicted_labels = self._experiment.predicted_labels[threshold_index][corruption_index]
+                predicted_labels = self._experiment.predicted_labels[corruption_index][threshold_index]
                 self._axes[1][0].clear()
                 self._axes[1][1].clear()
                 self._experiment.synthetic_test[corruption_index].plot(true_labels, title='True Clustering',
@@ -110,21 +110,29 @@ class SyntheticExperiment(object):
                 self._experiment.synthetic_test[corruption_index].plot(predicted_labels, title='Predicted Clustering',
                                                                        color_seed=self._color_seed, ax=self._axes[1][1])
                 self.pf1_dot.set_xdata(self._experiment.thresholds[threshold_index])
-                self.pf1_dot.set_ydata(self._experiment.metrics[threshold_index][corruption_index].pairwise_f1)
+                self.pf1_dot.set_ydata(self._experiment.metrics[corruption_index][threshold_index].pairwise_f1)
                 self._figures[0].canvas.draw()
                 self._threshold_index = threshold_index
 
     def __init__(self, number_entities, records_per_entity):
+        ## Parameters ##
+        self.corruption_multipliers = np.linspace(0, 0.2, 10)
+        self.thresholds = np.linspace(0, 1, 10)
+        ################
         uncorrupted_synthetic = Synthetic(number_entities, records_per_entity, number_features=2, sigma=0)
-        self._uncorrupted_synthetic_train = uncorrupted_synthetic.sample_and_remove(float(number_entities)*records_per_entity/2)
-        _, _, _, self._train_pair_seed = get_pairs(self._uncorrupted_synthetic_train.database,
-                                          self._uncorrupted_synthetic_train.labels, 300, balancing=True)
+        self._uncorrupted_synthetic_train = uncorrupted_synthetic.sample_and_remove(float(number_entities) *
+                                                                                    records_per_entity/2)
+        self._train_pair_seed = generate_pair_seed(self._uncorrupted_synthetic_train.database,
+                                                   self._uncorrupted_synthetic_train.labels, 300, balancing=True)
         self.uncorrupted_synthetic_test = uncorrupted_synthetic
         self._synthetic_train = list()
         self.synthetic_test = list()
-        self.corruption_multipliers = np.linspace(0, 0.2, 10)
-        self.corruption_train = np.random.normal(loc=0.0, scale=1.0, size=[len(self._uncorrupted_synthetic_train.database.records), uncorrupted_synthetic.database.feature_descriptor.number])
-        self.corruption_test = np.random.normal(loc=0.0, scale=1.0, size=[len(self.uncorrupted_synthetic_test.database.records), uncorrupted_synthetic.database.feature_descriptor.number])
+        self.corruption_train = np.random.normal(loc=0.0, scale=1.0,
+                                                 size=[len(self._uncorrupted_synthetic_train.database.records),
+                                                       uncorrupted_synthetic.database.feature_descriptor.number])
+        self.corruption_test = np.random.normal(loc=0.0, scale=1.0,
+                                                size=[len(self.uncorrupted_synthetic_test.database.records),
+                                                      uncorrupted_synthetic.database.feature_descriptor.number])
         for multiplier in self.corruption_multipliers:
             new_train = deepcopy(self._uncorrupted_synthetic_train)
             new_test = deepcopy(self.uncorrupted_synthetic_test)
@@ -132,18 +140,33 @@ class SyntheticExperiment(object):
             new_test.corrupt(multiplier*self.corruption_test)
             self._synthetic_train.append(new_train)
             self.synthetic_test.append(new_test)
-        #self._synthetic_train[0].plot(self._synthetic_train[0].labels, title='Training Dataset')
-        #self._synthetic_test[0].plot(self._synthetic_test[0].labels, title='Testing Dataset')
-        self.thresholds = np.linspace(0, 1, 100)
         self.entity_resolution = list()
-        self.metrics = list()
-        self.predicted_labels = list()
-        for threshold in self.thresholds:
-            print 'Threshold:', threshold
-            er, metrics, labels = self.swoosh_all(threshold)
-            self.entity_resolution.append(er)
-            self.metrics.append(metrics)
-            self.predicted_labels.append(labels)
+        self.predicted_labels, self.metrics = self.run()
+
+    def run(self):
+        """
+        Runs ER for all corruption levels and all thresholds
+        :return predicted_labels: List of lists of predicted labels.
+                                  predicted_labels[corruption_index][threshold_index] = dict [identifier, cluster label]
+        :return metrics: List of lists of metric objects.
+                         metrics[corruption_index][threshold_index] = Metrics object
+        """
+        predicted_labels = list()
+        metrics = list()
+        for synthetic_train, synthetic_test in izip(self._synthetic_train, self.synthetic_test):
+            er = EntityResolution()
+            weak_match_function = er.train(synthetic_train.database, synthetic_train.labels, 300, balancing=True,
+                                           pair_seed=self._train_pair_seed)
+            metrics_sublist = list()
+            labels_sublist = list()
+            for threshold in self.thresholds:
+                labels_pred = er.run(synthetic_test.database, weak_match_function, threshold, single_block=True,
+                                     match_type='weak', max_block_size=np.Inf, cores=1)
+                metrics_sublist.append(Metrics(synthetic_test.labels, labels_pred))
+                labels_sublist.append(labels_pred)
+            metrics.append(metrics_sublist)
+            predicted_labels.append(labels_sublist)
+        return predicted_labels, metrics
 
     def explore_path(self, entity, er):
         """
@@ -164,27 +187,6 @@ class SyntheticExperiment(object):
             if strength != 'none':  # if it was a match (valid path)
                 match_probability_list.append(probability)
         return match_probability_list
-
-    def swoosh_all(self, threshold):
-        """
-        Runs ER on all the databases, operating match function at threshold
-        :param threshold: Cut-off threshold for matching [0,1]
-        :return er_list: List of EntityResolution objects, corresponding to all the databases
-        :return metrics_list: List of Metirc objects, corresponding to all the databases
-        """
-        er_list = list()
-        metrics_list = list()
-        labels_list = list()  # the predicted labels
-        for synthetic_train, synthetic_test in izip(self._synthetic_train, self.synthetic_test):
-            er = EntityResolution()
-            weak_match_function = er.train(synthetic_train.database, synthetic_train.labels, 300, balancing=True,
-                                           pair_seed=self._train_pair_seed)
-            labels_pred = er.run(synthetic_test.database, weak_match_function, threshold, single_block=True,
-                                 match_type='weak', max_block_size=np.Inf, cores=1)
-            metrics_list.append(Metrics(synthetic_test.labels, labels_pred))
-            er_list.append(er)
-            labels_list.append(labels_pred)
-        return er_list, metrics_list, labels_list
 
     def plot_metrics(self):
         """

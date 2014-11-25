@@ -1,12 +1,12 @@
 import unittest
 import datetime
-from record import Record, FeatureDescriptor, month
+from record import Record, FeatureDescriptor
 __author__ = 'mbarnes1'
 
 
 class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self._features_full = '9552601,neworleans,Thu Jan 30 02:41:11 EST 2014,Louisiana,New Orleans,8,' \
+        self._features_full = '9552601,neworleans,2014-01-30 02:41:11,Louisiana,New Orleans,8,' \
                               '0,haley,22,60/80/100,66,110.5,DD,30,26,29,caucasian,white,blue,brunette,' \
                               'rest_type,rest_ethnicity,res_age,9802534087;5182561877,NC;NY,charlotte;' \
                               'albany,john@smith.com,www.johnsmith.com,johnsmithmedia,' \
@@ -76,10 +76,6 @@ class MyTestCase(unittest.TestCase):
         self.assertNotEqual(self._r0, self._r1)
         self._r1.merge(self._r0)
         self.assertEqual(self._r0, self._r1)
-
-    def test_month(self):
-        m = month('Apr')
-        self.assertEqual(m, 4)
 
 
 if __name__ == '__main__':

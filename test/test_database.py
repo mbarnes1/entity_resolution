@@ -3,6 +3,7 @@ from copy import deepcopy
 from database import Synthetic, Database, remove_indices, find_in_list
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 __author__ = 'mbarnes1'
 
 
@@ -77,12 +78,12 @@ class MyTestCase(unittest.TestCase):
     def test_plot(self):
         synthetic_original = Synthetic(10, 5, sigma=0)
         synthetic_original.plot(synthetic_original.labels, title='No Noise')
+        plt.show()
         synthetic_noise = deepcopy(synthetic_original)
-        synthetic_noise.corrupt_evenly(0.1)
+        noise = (np.random.randn(50, 2)*0.02).tolist()
+        synthetic_noise.corrupt(noise)
         synthetic_noise.plot(synthetic_noise.labels, title='Even Noise')
-        synthetic_noise = deepcopy(synthetic_original)
-        synthetic_noise.corrupt_clusters(0.2)
-        synthetic_noise.plot(synthetic_noise.labels, title='Per Cluster Noise')
+        plt.show()
 
     def test_corrupt(self):
         synthetic = Synthetic(3, 3, number_features=2, sigma=0)

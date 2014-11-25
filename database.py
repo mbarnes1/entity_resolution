@@ -100,7 +100,6 @@ class Synthetic(object):
             x2.append(_x2)
             color_list.append(label_to_color[label])
             print 'Color:', label_to_color[label]
-            #ax.scatter(_x1, _x2, s=50, c=label_to_color[label])
         ax.scatter(x1, x2, s=100, c=color_list, alpha=1.0)
         ax.set_title(title)
         print 'x1:', x1
@@ -108,7 +107,6 @@ class Synthetic(object):
         print 'Colors:', color_list
 
         ax.axis([-0.2, 1.2, -0.2, 1.2])
-        #plt.show()
 
 
 class Database(object):
@@ -127,7 +125,6 @@ class Database(object):
     where M is the number of ads and N is the number of features
     """
     def __init__(self, annotation_path=None, max_records=np.Inf):
-        #self._annotation_path = annotation_path
         self.records = dict()
         if annotation_path:
             ins = open(annotation_path, 'r')

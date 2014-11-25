@@ -81,6 +81,7 @@ class EntityResolution(object):
         :param max_block_size: Blocks larger than this are thrown away
         :param single_block: If True, puts all records into single large weak block (only OK for small databases)
         :param cores: The number of processes (i.e. workers) to use
+        :return identifier_to_cluster: Predicted labels, of dictionary form [identifier, cluster label]
         """
         self._match_type = match_type
         self._match_function = match_function
@@ -110,13 +111,13 @@ class EntityResolution(object):
         # Create block jobs for workers
         for blockname, indices in self.blocking.strong_blocks.iteritems():
             index_block = set()
-            for index in indices:
-                index_block.add(records[index])
+            for identifier in indices:
+                index_block.add(records[identifier])
             job_queue.put(index_block)
         for blockname, indices in self.blocking.weak_blocks.iteritems():
             index_block = set()
-            for index in indices:
-                index_block.add(records[index])
+            for identifier in indices:
+                index_block.add(records[identifier])
             job_queue.put(index_block)
         for _ in workerpool:
             job_queue.put(None)  # Sentinel objects to allow clean shutdown: 1 per worker.
@@ -176,11 +177,11 @@ class EntityResolution(object):
         """
         print 'Merging entities...'
         self.entities = merge_duped_records(swoosheddict)
-        index_to_cluster = dict()
+        identifier_to_cluster = dict()
         for cluster_index, entity in enumerate(self.entities):
-            for index in entity.line_indices:
-                index_to_cluster[index] = cluster_index
-        return index_to_cluster
+            for identifier in entity.line_indices:
+                identifier_to_cluster[identifier] = cluster_index
+        return identifier_to_cluster
 
     # RSwoosh - I and Inew are a set of records, returns a set of records
     def rswoosh(self, I):

@@ -30,8 +30,8 @@ class SurrogateMatchFunction(object):
         :param pair_seed: List of pairs to use. Otherwise random
         :return pairs: Set of pairs. Each pair is a list with two entries, the two ad identifiers
         """
-        x1_train, x2_train, self.x2_mean, pairs = get_pairs(database_train, labels_train, number_samples, balancing,
-                                                            pair_seed=pair_seed)
+        x1_train, x2_train, self.x2_mean = get_pairwise_features(database_train, labels_train, number_samples,
+                                                                 balancing, pair_seed=pair_seed)
         self.logreg.fit(x2_train, x1_train)
 
     def test(self, database_test, labels_test, test_size=1000):
@@ -41,7 +41,7 @@ class SurrogateMatchFunction(object):
         :param test_size: Number of pairwise samples to use in testing
         :return RocCurve: An RocCurve object
         """
-        x1_test, x2_test, _, _ = get_pairs(database_test, labels_test, test_size, True)
+        x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, test_size, True)
         x1_bar_probability = self.logreg.predict_proba(x2_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))
         #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
@@ -84,7 +84,69 @@ class SurrogateMatchFunction(object):
             return False, p_x1, strength
 
 
-def get_pairs(database, labels_train, number_samples, balancing, pair_seed=None):
+def generate_pair_seed(database, labels_train, number_samples, balancing):
+    """
+    Generates list of pairs to seed from. Useful for removing random process noise for tests on related datasets
+    :param database: Database object
+    :param labels_train: Cluster labels of database. Dictionary [identifier, cluster label]
+    :param number_samples: Number of samples in pair seed
+    :param balancing: Boolean, whether to balance match/mismatch classes
+    :return pair_seed: List of pairs, where each pair is a vector of form (identifierA, identifierB)
+    """
+    if len(database.records)*(len(database.records)-1)/2 < number_samples:
+        raise Exception('Number of requested pairs exceeds number of pairs available in database')
+    print 'Generating pairwise seed of length', number_samples
+    pairs = set()
+    cluster_to_records = dict()
+    line_indices = database.records.keys()
+    print 'Creating cluster to identifier hash table'
+    for index, cluster in labels_train.iteritems():
+        if cluster in cluster_to_records:
+            cluster_to_records[cluster].append(index)
+        else:
+            cluster_to_records[cluster] = [index]
+    cluster_keys = cluster_to_records.keys()
+    cluster_sizes = []  # probability of randomly selecting a pair from a cluster
+    number_pairs = 0
+    print 'Calculating number of pairs in each cluster, for cluster sampling probability'
+    for key in cluster_keys:
+        records = cluster_to_records[key]
+        cluster_pairs = float(len(records))*(len(records)-1)/2
+        cluster_sizes.append(cluster_pairs)
+        number_pairs += cluster_pairs
+    cluster_prob = [size/number_pairs for size in cluster_sizes]
+    counter = 0
+    while len(pairs) < number_samples:
+        print 'Sampling pair', counter
+        to_balance = random.choice([True, False])
+        if balancing and to_balance:
+            print 'Sampling pair from within cluster'
+            cluster = choice(cluster_keys, p=cluster_prob)
+            pair = None
+            while not pair:
+                pair = tuple(choice(cluster_to_records[cluster], size=2, replace=False))
+                pair_flipped = (pair[1], pair[0])
+                if (pair[0] != pair[1]) and \
+                        (pair not in pairs) and \
+                        (pair_flipped not in pairs):  # valid pair, not used before
+                    pairs.add(pair)
+        else:
+            print 'Sampling pair from between clusters'
+            pair = None
+            while not pair:
+                pair = tuple(choice(line_indices, size=2, replace=False))
+                pair_flipped = (pair[1], pair[0])
+                if (labels_train[pair[0]] != labels_train[pair[1]]) and \
+                        (pair[0] != pair[1]) and \
+                        (pair not in pairs) and \
+                        (pair_flipped not in pairs):  # not in cluster, valid pair, not used before
+                    pairs.add(pair)
+        counter += 1
+    pairs = list(pairs)
+    return pairs
+
+
+def get_pairwise_features(database, labels_train, number_samples, balancing, pair_seed=None):
     """
     Randomly samples pairs of records, without replacement.
     Can balance classes, using labels_train
@@ -96,60 +158,17 @@ def get_pairs(database, labels_train, number_samples, balancing, pair_seed=None)
     :return x1: Vector of strong features, values takes either 0 or 1
     :return x2: n x m Matrix of weak features, where n is number_samples and m is number of weak features
     :return m: Mean imputation vector of weak features, 1 x number of weak features
-    :return pairs: A list of pairs, each pair being a 1D vector w/ two entries, the identifiers of each record
     """
-    if len(database.records)*(len(database.records)-1)/2 < number_samples:
-        raise Exception('Number of requested pairs exceeds number of pairs available in database')
-    if pair_seed is not None:
-        if number_samples > len(pair_seed):
-            raise Exception('Number of requested pairs exceeds length of seed')
-    line_indices = database.records.keys()
-    x1 = list()
-    x2 = list()
     if pair_seed is None:  # randomly draw new pairs
-        pairs = set()
-        cluster_to_records = dict()
-        for index, cluster in labels_train.iteritems():
-            if cluster in cluster_to_records:
-                cluster_to_records[cluster].append(index)
-            else:
-                cluster_to_records[cluster] = [index]
-        cluster_keys = cluster_to_records.keys()
-        cluster_sizes = []  # probability of randomly selecting a pair from a cluster
-        number_pairs = 0
-        for key in cluster_keys:
-            records = cluster_to_records[key]
-            cluster_pairs = float(len(records))*(len(records)-1)/2
-            cluster_sizes.append(cluster_pairs)
-            number_pairs += cluster_pairs
-        cluster_prob = [size/number_pairs for size in cluster_sizes]
-        while len(pairs) < number_samples:
-            to_balance = random.choice([True, False])
-            if balancing and to_balance:
-                cluster = choice(cluster_keys, p=cluster_prob)
-                pair = None
-                while not pair:
-                    pair = tuple(choice(cluster_to_records[cluster], size=2, replace=False))
-                    pair_flipped = (pair[1], pair[0])
-                    if (pair[0] != pair[1]) and \
-                            (pair not in pairs) and \
-                            (pair_flipped not in pairs):  # valid pair, not used before
-                        pairs.add(pair)
-            else:
-                pair = None
-                while not pair:
-                    pair = tuple(choice(line_indices, size=2, replace=False))
-                    pair_flipped = (pair[1], pair[0])
-                    if (labels_train[pair[0]] != labels_train[pair[1]]) and \
-                            (pair[0] != pair[1]) and \
-                            (pair not in pairs) and \
-                            (pair_flipped not in pairs):  # not in cluster, valid pair, not used before
-                        pairs.add(pair)
-        pairs = list(pairs)
+        if len(database.records)*(len(database.records)-1)/2 < number_samples:
+            raise Exception('Number of requested pairs exceeds number of pairs available in database')
+        pairs = generate_pair_seed(database, labels_train, number_samples, balancing)
     else:  # use pair seed
         if number_samples > len(pair_seed):
             raise Exception('Number requested samples larger than seed')
         pairs = pair_seed[:number_samples]
+    x1 = list()
+    x2 = list()
     for pair in pairs:
         r1 = database.records[pair[0]]
         r2 = database.records[pair[1]]
@@ -161,7 +180,7 @@ def get_pairs(database, labels_train, number_samples, balancing, pair_seed=None)
     x1 = np.asarray(x1)
     x2 = np.asarray(x2)
     m = mean_imputation(x2)
-    return x1, x2, m, pairs
+    return x1, x2, m
 
 
 def get_x2(r1, r2):

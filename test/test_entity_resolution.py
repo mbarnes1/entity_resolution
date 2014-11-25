@@ -15,7 +15,7 @@ class MyTestCase(unittest.TestCase):
         self._blocking = BlockingScheme(self._database)
         self._er = EntityResolution()
         self._er._match_type = 'strong'
-        self._match_function = self._er.train(self._database, self._labels, 10, True)
+        self._match_function = self._er.train(self._database, self._labels, 6, True)
 
     def test_run(self):
         self._er.run(self._database, self._match_function, 0.99, 'strong', cores=2)

@@ -1,7 +1,7 @@
 __author__ = 'mbarnes1'
 import unittest
 from pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
-    binary_match, get_x1, get_x2, get_pairs
+    binary_match, get_x1, get_x2, get_pairwise_features, generate_pair_seed
 from pipeline import fast_strong_cluster
 from database import Database
 from blocking import BlockingScheme
@@ -15,17 +15,17 @@ class MyTestCase(unittest.TestCase):
         self._blocking = BlockingScheme(self._database)
         self._surrogate = SurrogateMatchFunction(0.99)
 
-    def test_get_pairs(self):
+    def test_pairs(self):
         database = Database('test_annotations_10000_cleaned.csv')
         labels = fast_strong_cluster(database)
-        pair_seed = np.random.randint(0, 10000, (10, 2))
+        pair_seed = generate_pair_seed(database, labels, 10000, True)
         # x1_a, x2_a, m_a = _get_pairs(database, labels, 10, balancing=True)
         # x1_b, x2_b, m_b = _get_pairs(database, labels, 10, balancing=True)
         # self.assertNotEqual(x1_a, x1_b)
         # self.assertNotEqual(x2_a, x2_b)
         # self.assertNotEqual(m_a, m_b)
-        x1_a, x2_a, m_a, pairs = get_pairs(database, labels, 10, balancing=True, pair_seed=pair_seed)
-        x1_b, x2_b, m_b, pairs = get_pairs(database, labels, 10, balancing=True, pair_seed=pair_seed)
+        x1_a, x2_a, m_a = get_pairwise_features(database, labels, 10, balancing=True, pair_seed=pair_seed)
+        x1_b, x2_b, m_b = get_pairwise_features(database, labels, 10, balancing=True, pair_seed=pair_seed)
         np.testing.assert_array_equal(x1_a, x1_b)
         np.testing.assert_array_equal(x2_a, x2_b)
         np.testing.assert_array_equal(m_a, m_b)
@@ -44,9 +44,9 @@ class MyTestCase(unittest.TestCase):
             0: 0,
             1: 0,
             2: 1,
-            3: 0
+            3: 1
         }
-        self._surrogate.train(self._database, labels, 2)
+        self._surrogate.train(self._database, labels, 4, balancing=True)
         self.assertTrue(self._surrogate.match(r0, r3, 'strong')[0])
         self.assertTrue(self._surrogate.match(r1, r3, 'strong')[0])
         self.assertFalse(self._surrogate.match(r0, r1, 'strong')[0])
