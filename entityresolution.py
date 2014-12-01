@@ -6,7 +6,7 @@ from blocking import BlockingScheme
 from pairwise_features import SurrogateMatchFunction
 from copy import deepcopy
 import gc
-from itertools import izip
+import random
 import traceback
 __author__ = 'mbarnes1'
 
@@ -52,7 +52,7 @@ class EntityResolution(object):
         self._match_type = None
         self.blocking = None
         self._match_function = SurrogateMatchFunction()
-        self.entities = set()
+        self.entities = list()
         self.decision_prob_list = []  # list of probabilities from attempted matches
         self.decision_strength_list = []  # list of decision strengths. 'weak', 'strong', 'weak_strong', or 'none'
 
@@ -183,15 +183,28 @@ class EntityResolution(object):
                 identifier_to_cluster[identifier] = cluster_index
         return identifier_to_cluster
 
-    # RSwoosh - I and Inew are a set of records, returns a set of records
-    def rswoosh(self, I):
+    def rswoosh(self, I, guarantee_random=False):
         """
         RSwoosh - Benjelloun et al. 2009
         Performs entity resolution on any set of records using merge and match functions
         :param I: Set of input records
+        :param guarantee_random: If true, guarantees the order of matches and merges is random.
+                                 Not guaranteed in the conventional implementation because of pseudo-random set pop and iteration
+                                 This is necessary for exploring a truly random path (decision_list and strength_list)
+                                 Output of Inew is deterministic, does not depend on guarantee_random
         :return Inew: Set of resolved entities (records)
         :return decision_list: List of decision probabilities
         :return strength_list: List of decision type ('strong', 'weak', 'both', 'none')
+        """
+        if not guarantee_random:
+            Inew, decision_list, strength_list = self._conventional_rswoosh(I)
+        else:
+            Inew, decision_list, strength_list = self._random_rswoosh(I)
+        return Inew, decision_list, strength_list
+
+    def _conventional_rswoosh(self, I):
+        """
+        RSwoosh, conventional implementation
         """
         Inew = set()  # initialize the resolved entities
         decision_list = []  # probabilities of each match/mismatch decision
@@ -213,6 +226,36 @@ class EntityResolution(object):
             else:
                 Inew.add(currentrecord)
         return Inew, decision_list, strength_list
+
+    def _random_rswoosh(self, I):
+        """
+        RSwoosh, with guaranteed random match/merge process
+        Slightly slower than _conventional_rswoosh
+        """
+        Inew = set()  # initialize the resolved entities
+        decision_list = []  # probabilities of each match/mismatch decision
+        strength_list = []  # strength of each match. 'weak', 'strong', 'both', or 'none'
+        while I:  # until entity resolution is complete
+            currentrecord = random.sample(I, 1)[0]  # an arbitrary record
+            I.discard(currentrecord)
+            buddy = False
+            Inew_list = list(Inew)
+            random.shuffle(Inew_list)
+            for rnew in Inew_list:  # iterate over Inew
+                match, prob, strength = self._match_function.match(currentrecord, rnew, self._match_type)
+                decision_list.append(prob)
+                strength_list.append(strength)
+                if match:
+                    buddy = rnew
+                    break  # Found a match!
+            if buddy:
+                currentrecord.merge(buddy)
+                I.add(currentrecord)
+                Inew.discard(buddy)
+            else:
+                Inew.add(currentrecord)
+        return Inew, decision_list, strength_list
+
 
     # def plot_decisions(self):
     #     """
@@ -254,7 +297,7 @@ def merge_duped_records(tomerge):
     Merges any entities containing the same ad.
     This is necessary due to placing records into multiple blocks.
     :param tomerge: Dictionary of [integer index, merged record]
-    :return: entities: set of records (the final entities)
+    :return: entities: list of records (the final entities)
     """
     # Input: dictionary of [key, merged record]
     # Create dual hash tables
@@ -273,7 +316,7 @@ def merge_duped_records(tomerge):
     explored_swooshed = set()  # swooshed records already explored
     explored_indices = set()
     toexplore = list()  # ads to explore
-    entities = set()  # final output of merged records
+    entities = list()  # final output of merged records
     counter = 1
     for s, indices in swoosh2indices.iteritems():  # iterate over all the nodes
         if s not in explored_swooshed:  # was this node already touched?
@@ -296,6 +339,6 @@ def merge_duped_records(tomerge):
             merged = tomerge[cc.pop()]
             for c in cc:
                 merged.merge(tomerge[c])
-            entities.add(merged)
+            entities.append(merged)
         counter += 1
     return entities

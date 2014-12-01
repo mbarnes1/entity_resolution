@@ -26,7 +26,7 @@ class MyTestCase(unittest.TestCase):
         r0.merge(r1)
         r0.merge(r3)
         manual = {r0, r2}
-        self.assertTrue(test_object_set(manual, self._er.entities))
+        self.assertTrue(test_object_set(manual, set(self._er.entities)))
 
     def test_rswoosh(self):
         r0 = self._database.records[0]
@@ -34,12 +34,14 @@ class MyTestCase(unittest.TestCase):
         r2 = self._database.records[2]
         r3 = self._database.records[3]
         records = {r0, r1, r2, r3}
-        (swooshed, _, _) = self._er.rswoosh(records)
+        (swooshed, _, _) = self._er.rswoosh(deepcopy(records))
         r1.merge(r3)
         r0.merge(r1)
         merged = {r0, r2}
         self.assertEqual(len(swooshed), len(merged))
         self.assertTrue(test_object_set(merged, swooshed))
+        (swooshed_random, _, _) = self._er.rswoosh(records, guarantee_random=True)
+        self.assertTrue(test_object_set(swooshed, swooshed_random))
 
     def test_merge_duped_records(self):
         r0 = self._database.records[0]
