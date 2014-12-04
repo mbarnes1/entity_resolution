@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from experiments import SyntheticExperiment
-from new_metric import NewMetric
+from new_metrics import NewMetrics
 __author__ = 'mbarnes1'
 
 
@@ -14,8 +14,8 @@ class MyTestCase(unittest.TestCase):
         experiment = SyntheticExperiment(2, 50)
         corruption_index = np.random.randint(0, len(experiment.corruption_multipliers))
         threshold_index = np.random.randint(0, len(experiment.thresholds))
-        cls._new_metric = NewMetric(experiment.synthetic_test[corruption_index].database,
-                                    experiment.er[corruption_index][threshold_index])
+        cls._new_metric = NewMetrics(experiment.synthetic_test[corruption_index].database,
+                                     experiment.er[corruption_index][threshold_index])
 
     def test_get_records(self):
         """

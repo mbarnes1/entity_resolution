@@ -1,8 +1,9 @@
 from itertools import izip
+from copy import deepcopy
 __author__ = 'mbarnes1'
 
 
-class NewMetric(object):
+class NewMetrics(object):
     def __init__(self, database, entity_resolution):
         """
         Un/semi-supervised entity resolution metrics
@@ -11,6 +12,7 @@ class NewMetric(object):
         """
         self.database = database
         self.er = entity_resolution
+        self.net_expected_cost = self.net_expected_cost()
 
     def _get_records(self, entity_index):
         """
@@ -20,9 +22,9 @@ class NewMetric(object):
         """
         entity = self.er.entities[entity_index]
         records = set()
-        for id in entity.line_indices:
-            records.add(self.database.records[id])
-        return records
+        for index in entity.line_indices:
+            records.add(self.database.records[index])
+        return deepcopy(records)
 
     def _random_path(self, entity_index):
         """
