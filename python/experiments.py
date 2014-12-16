@@ -153,7 +153,7 @@ class SyntheticExperiment(object):
     def __init__(self, number_entities, records_per_entity):
         ## Parameters ##
         self.corruption_multipliers = np.linspace(0, 0.1, 10)
-        self.thresholds = np.linspace(0, 1, 100)
+        self.thresholds = np.linspace(0, 1, 10)
         ################
         uncorrupted_synthetic = Synthetic(number_entities, records_per_entity, number_features=2, sigma=0)
         self._uncorrupted_synthetic_train = uncorrupted_synthetic.sample_and_remove(float(number_entities) *
