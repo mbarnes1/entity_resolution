@@ -1,4 +1,4 @@
-README
+README - Matt Barnes
 
 Abt-Buy [1]
 Perfect mapping using UPC codes
@@ -13,6 +13,7 @@ DBLP-Scholar [1]
 Perfect manual mapping
 
 restaurant [2]
+863 records
 
 pharma_sample[3]
 
