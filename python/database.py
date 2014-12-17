@@ -6,7 +6,7 @@ from itertools import izip
 __author__ = 'mbarnes1'
 
 
-class Synthetic(object):
+class SyntheticDatabase(object):
     """
     Create and corrupt synthetic databases
     """
@@ -50,7 +50,7 @@ class Synthetic(object):
         :param number_samples: The number of samples to take
         :return new_synthetic: New Synthetic object (includes database and labels)
         """
-        new_synthetic = Synthetic(0, 0)  # empty
+        new_synthetic = SyntheticDatabase(0, 0)  # empty
         new_synthetic.database = self.database.sample_and_remove(number_samples)
         for key, _ in new_synthetic.database.records.iteritems():
             new_synthetic.labels[key] = self.labels.pop(key)
@@ -124,7 +124,13 @@ class Database(object):
     
     where M is the number of ads and N is the number of features
     """
-    def __init__(self, annotation_path=None, max_records=np.Inf):
+    def __init__(self, annotation_path=None, max_records=np.Inf, precomputed_x2=None):
+        """
+        :param annotation_path: String, path to annotation file
+        :param max_records: Int, number of records to load from annotation file
+        :param precomputed_x2: Precomputed weak features (smaller valued feature is better)
+                               A dict[(id1, id2)] = 1D vector, where id2 >= id1
+        """
         self.records = dict()
         if annotation_path:
             ins = open(annotation_path, 'r')
@@ -150,6 +156,7 @@ class Database(object):
                     break
         else:
             self.feature_descriptor = None
+        self._precomputed_x2 = precomputed_x2
 
     def sample_and_remove(self, number_samples):
         """

@@ -1,6 +1,6 @@
 import unittest
 import datetime
-from record import Record, FeatureDescriptor
+from python.record import Record, FeatureDescriptor
 __author__ = 'mbarnes1'
 
 

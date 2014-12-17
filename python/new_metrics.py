@@ -12,7 +12,7 @@ class NewMetrics(object):
         """
         self.database = database
         self.er = entity_resolution
-        self.net_expected_cost = self.net_expected_cost()
+        self.net_expected_cost = self.get_net_expected_cost()
 
     def _get_records(self, entity_index):
         """
@@ -58,7 +58,7 @@ class NewMetrics(object):
         expected_path_cost /= number_monte_carlo
         return expected_path_cost
 
-    def net_expected_cost(self):
+    def get_net_expected_cost(self):
         """
         Computes the sum of the expected path cost for each entity
         :return net_cost:

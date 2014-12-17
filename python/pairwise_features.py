@@ -3,10 +3,10 @@ All pairwise features and functions. This includes training and testing the matc
 """
 from sklearn import linear_model
 import numpy as np
-from numpy.random import choice
 import random
 from roc import RocCurve
 from itertools import izip
+import Levenshtein
 __author__ = 'mbarnes1'
 
 
@@ -121,10 +121,10 @@ def generate_pair_seed(database, labels_train, number_samples, balancing):
         to_balance = random.choice([True, False])
         if balancing and to_balance:
             print 'Sampling pair from within cluster'
-            cluster = choice(cluster_keys, p=cluster_prob)
+            cluster = np.random.choice(cluster_keys, p=cluster_prob)
             pair = None
             while not pair:
-                pair = tuple(choice(cluster_to_records[cluster], size=2, replace=False))
+                pair = tuple(np.random.choice(cluster_to_records[cluster], size=2, replace=False))
                 pair_flipped = (pair[1], pair[0])
                 if (pair[0] != pair[1]) and \
                         (pair not in pairs) and \
@@ -134,7 +134,7 @@ def generate_pair_seed(database, labels_train, number_samples, balancing):
             print 'Sampling pair from between clusters'
             pair = None
             while not pair:
-                pair = tuple(choice(line_indices, size=2, replace=False))
+                pair = tuple(np.random.choice(line_indices, size=2, replace=False))
                 pair_flipped = (pair[1], pair[0])
                 if (labels_train[pair[0]] != labels_train[pair[1]]) and \
                         (pair[0] != pair[1]) and \
@@ -176,7 +176,11 @@ def get_pairwise_features(database, labels_train, number_samples, balancing, pai
         c2 = labels_train[next(iter(r2.line_indices))]  # cluster r2 belongs to
         _x1 = int(c1 == c2)
         x1.append(_x1)
-        x2.append(get_x2(r1, r2))
+        if database._precomputed_x2:
+            _x2 = get_precomputed_x2(database._precomputed_x2, r1, r2)
+        else:
+            _x2 = get_x2(r1, r2)
+        x2.append(_x2)
     x1 = np.asarray(x1)
     x2 = np.asarray(x2)
     m = mean_imputation(x2)
@@ -203,6 +207,8 @@ def get_x2(r1, r2):
                 x2.append(number_matches(f1, f2))
             elif pairwise_use == 'special_date_difference':
                 x2.append(date_difference(f1, f2))
+            elif pairwise_use == 'levenshtein':
+                x2.append(levenshtein(f1, f2))
             else:
                 raise Exception('Invalid pairwise use: ' + pairwise_use)
     x2 = np.asarray(x2)
@@ -298,7 +304,7 @@ def numerical_difference(feat1, feat2):
 
 def date_difference(feat1, feat2):
     """
-    Minimum pairwise disteance between two date feature sets, in seconds
+    Minimum pairwise distance between two date feature sets, in seconds
     Satisfies ICAR properties
     :param feat1: Set of date features
     :param feat2: Set of date features
@@ -312,3 +318,41 @@ def date_difference(feat1, feat2):
     else:
         x = np.nan
     return x
+
+
+def levenshtein(feat1, feat2):
+    """
+    Minimum Levenshtein distance between two sets of strings
+    Satisfies ICAR properties
+    :param feat1: Set of string features
+    :param feat2: Set of string features
+    :return: Int or NaN (not enough info to make decision, if either set is empty)
+    """
+    if bool(feat1) & bool(feat2):
+        x = np.Inf
+        for s1 in feat1:
+            for s2 in feat2:
+                x = min(x, Levenshtein.distance(s1, s2))
+    else:
+        x = np.nan
+    return x
+
+
+def get_precomputed_x2(precomputed_x2, r1, r2):
+    """
+    Minimum precomputed feature vector
+    :param precomputed_x2: Precomputed weak features (smaller valued feature is better)
+                           A dict[(id1, id2)] = 1D vector, where id2 >= id1
+    :param r1: Record
+    :param r2: Record
+    :return min_features: 1-D vector with m entries, where m is number of weak features.
+    """
+    min_features = None
+    for line1 in r1.line_indices:
+        for line2 in r2.line_indices:
+            line_tuple = [line1, line2]
+            line_tuple.sort()
+            line_tuple = tuple(line_tuple)
+            features = precomputed_x2(line_tuple)
+            min_features = np.minimum(min_features, features)
+    return min_features

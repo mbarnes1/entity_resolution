@@ -3,7 +3,6 @@ This is the blocking scheme used to make Entity Resolution computationally feasi
 """
 import numpy as np
 from itertools import izip
-from copy import copy
 __author__ = 'mbarnes1'
 
 

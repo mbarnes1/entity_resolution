@@ -20,6 +20,7 @@ class Metrics(object):
         self._labels_pred = labels_pred
         self._clusters_pred = _cluster(labels_pred)
         self._clusters_true = _cluster(labels_true)
+        self.number_entities = len(self._clusters_pred)
         self.pairwise_precision, self.pairwise_recall, self.pairwise_f1 = self._pairwise_precision_recall_f1()
         self.cluster_precision, self.cluster_recall, self.cluster_f1 = self._cluster_precision_recall_f1()
         self.closest_cluster_precision, self.closest_cluster_recall, self.closest_cluster_f1 = \

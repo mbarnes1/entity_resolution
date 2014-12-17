@@ -88,10 +88,7 @@ class EntityResolution(object):
         self._match_function.decision_threshold = decision_threshold
         # Multiprocessing code
         if cores > 1:  # large job, use memory bufffer
-            try:
-                memory_buffer = pickle.load(open('../blocking.p', 'rb'))  # so workers are allocated appropriate memory
-            except:
-                memory_buffer = pickle.load(open('../../blocking.p', 'rb'))  # unit tests
+            memory_buffer = pickle.load(open('memory_buffer.p', 'rb'))  # so workers are allocated appropriate memory
         job_queue = multiprocessing.Queue()
         results_queue = multiprocessing.Queue()
         workerpool = list()

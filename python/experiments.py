@@ -1,5 +1,5 @@
 __author__ = 'mbarnes1'
-from database import Synthetic
+from database import Database, SyntheticDatabase
 from copy import deepcopy
 from entityresolution import EntityResolution
 from pairwise_features import generate_pair_seed
@@ -12,6 +12,7 @@ from matplotlib.widgets import Slider
 import cProfile
 import matplotlib.cm as cm
 from new_metrics import NewMetrics
+import cPickle as pickle
 
 
 class SyntheticExperiment(object):
@@ -86,7 +87,7 @@ class SyntheticExperiment(object):
             predicted_labels = experiment.predicted_labels[self._corruption_index][self._threshold_index]
             experiment.synthetic_test[self._corruption_index].plot(predicted_labels, title='Predicted Clustering',
                                                                    color_seed=self._color_seed, ax=self._axes[-1][1])
-            
+
             # make the sliders
             axframe = plt.axes([0.125, 0.1, 0.775, 0.03])
             self.sframe = Slider(axframe, 'Noise', 0, len(experiment.corruption_multipliers)-1, valinit=0, valfmt='%d')
@@ -155,7 +156,7 @@ class SyntheticExperiment(object):
         self.corruption_multipliers = np.linspace(0, 0.1, 10)
         self.thresholds = np.linspace(0, 1, 10)
         ################
-        uncorrupted_synthetic = Synthetic(number_entities, records_per_entity, number_features=2, sigma=0)
+        uncorrupted_synthetic = SyntheticDatabase(number_entities, records_per_entity, number_features=2, sigma=0)
         self._uncorrupted_synthetic_train = uncorrupted_synthetic.sample_and_remove(float(number_entities) *
                                                                                     records_per_entity/2)
         self._train_pair_seed = generate_pair_seed(self._uncorrupted_synthetic_train.database,
@@ -216,65 +217,231 @@ class SyntheticExperiment(object):
             er_objects.append(er_sublist)
         return predicted_labels, metrics, er_objects, new_metrics_objects
 
-    def plot_metrics(self):
+    # def plot_metrics(self):
+    #     """
+    #     Makes precision/recall plots
+    #     """
+    #     pairwise_precision_array = np.empty((len(self.metrics), len(self.corruption_multipliers)))
+    #     pairwise_recall_array = np.empty((len(self.metrics), len(self.corruption_multipliers)))
+    #     pairwise_f1_array = np.empty((len(self.metrics), len(self.corruption_multipliers)))
+    #     for threshold_index, metrics in enumerate(self.metrics):  # metrics at set threshold
+    #         for corruption_index, metric in enumerate(metrics):  # metrics at set corruption
+    #             pairwise_precision_array[threshold_index, corruption_index] = metric.pairwise_precision
+    #             pairwise_recall_array[threshold_index, corruption_index] = metric.pairwise_recall
+    #             pairwise_f1_array[threshold_index, corruption_index] = metric.pairwise_f1
+    #
+    #     ## Precision vs. Recall
+    #     plt.plot(pairwise_recall_array, pairwise_precision_array)
+    #     plt.title('Pairwise Precision Recall')
+    #     plt.xlabel('Recall')
+    #     plt.ylabel('Precision')
+    #     plt.legend(self.corruption_multipliers.astype(str), title='Corruption')
+    #     plt.show()
+    #
+    #     ## Precision v. Threshold
+    #     plt.plot(self.thresholds, pairwise_precision_array)
+    #     plt.title('Pairwise Precision')
+    #     plt.xlabel('Threshold')
+    #     plt.ylabel('Precision')
+    #     plt.legend(self.corruption_multipliers.astype(str), title='Corruption')
+    #     plt.show()
+    #
+    #     ## Recall v. Threshold
+    #     plt.plot(self.thresholds, pairwise_recall_array)
+    #     plt.title('Pairwise Recall')
+    #     plt.xlabel('Threshold')
+    #     plt.ylabel('Recall')
+    #     plt.legend(self.corruption_multipliers.astype(str), title='Corruption')
+    #     plt.show()
+    #
+    #     ## F1 v Threshold
+    #     plt.plot(self.thresholds, pairwise_f1_array)
+    #     plt.title('Pairwise F1')
+    #     plt.xlabel('Threshold')
+    #     plt.ylabel('F1')
+    #     plt.legend(self.corruption_multipliers.astype(str), title='Corruption')
+    #     plt.show()
+    #
+    #     print 'Threshold (rows) vs. Corruption Level (Columns)'
+    #     print 'Pairwise Precision'
+    #     np.set_printoptions(precision=5, suppress=True)  # no scientific notation
+    #     print pairwise_precision_array
+    #     print 'Pairwise Recall'
+    #     print pairwise_recall_array
+    #     print 'Pairwise F1'
+    #     print pairwise_f1_array
+
+
+class Experiment(object):
+    """
+    An experiment on a single synthetic or real database, with varying cutoff thresholds
+    """
+    class ResultsPlot(object):
         """
-        Makes precision/recall plots
+        Plot of the metrics at varying thresholds
         """
-        pairwise_precision_array = np.empty((len(self.metrics), len(self.corruption_multipliers)))
-        pairwise_recall_array = np.empty((len(self.metrics), len(self.corruption_multipliers)))
-        pairwise_f1_array = np.empty((len(self.metrics), len(self.corruption_multipliers)))
-        for threshold_index, metrics in enumerate(self.metrics):  # metrics at set threshold
-            for corruption_index, metric in enumerate(metrics):  # metrics at set corruption
-                pairwise_precision_array[threshold_index, corruption_index] = metric.pairwise_precision
-                pairwise_recall_array[threshold_index, corruption_index] = metric.pairwise_recall
-                pairwise_f1_array[threshold_index, corruption_index] = metric.pairwise_f1
+        def __init__(self, experiment):
+            """
+            :param experiment: Experiment parent object
+            """
+            self._experiment = experiment
 
-        ## Precision vs. Recall
-        plt.plot(pairwise_recall_array, pairwise_precision_array)
-        plt.title('Pairwise Precision Recall')
-        plt.xlabel('Recall')
-        plt.ylabel('Precision')
-        plt.legend(self.corruption_multipliers.astype(str), title='Corruption')
-        plt.show()
+            self._threshold_index = 0
 
-        ## Precision v. Threshold
-        plt.plot(self.thresholds, pairwise_precision_array)
-        plt.title('Pairwise Precision')
-        plt.xlabel('Threshold')
-        plt.ylabel('Precision')
-        plt.legend(self.corruption_multipliers.astype(str), title='Corruption')
-        plt.show()
+            # Plot the metrics
+            self._figures = list()
+            self._axes = list()
 
-        ## Recall v. Threshold
-        plt.plot(self.thresholds, pairwise_recall_array)
-        plt.title('Pairwise Recall')
-        plt.xlabel('Threshold')
-        plt.ylabel('Recall')
-        plt.legend(self.corruption_multipliers.astype(str), title='Corruption')
-        plt.show()
+            # Pairwise
+            self._figures.append(plt.figure())
+            ax = self._figures[0].add_subplot(111)
+            ax.grid(linestyle='--')
+            self._axes.append([ax])
+            pairwise_f1 = list()
+            pairwise_precision = list()
+            pairwise_recall = list()
+            for threshold_index, threshold in enumerate(experiment.thresholds):
+                pairwise_f1.append(experiment.metrics[threshold_index].pairwise_f1)
+                pairwise_precision.append(experiment.metrics[threshold_index].pairwise_precision)
+                pairwise_recall.append(experiment.metrics[threshold_index].pairwise_recall)
+            ax.plot(experiment.thresholds, pairwise_f1, label='Pairwise F1')
+            ax.plot(experiment.thresholds, pairwise_precision, label='Pairwise Precision')
+            ax.plot(experiment.thresholds, pairwise_recall, label='Pairwise Recall')
+            plt.legend(loc='upper left')
+            self._axes[0][0].set_xlabel('Threshold')
+            self._axes[0][0].set_ylabel('Score')
+            self._axes[0][0].set_title('Pairwise Metrics')
+            self._axes[0][0].set_ylim([0, 1.0])
 
-        ## F1 v Threshold
-        plt.plot(self.thresholds, pairwise_f1_array)
-        plt.title('Pairwise F1')
-        plt.xlabel('Threshold')
-        plt.ylabel('F1')
-        plt.legend(self.corruption_multipliers.astype(str), title='Corruption')
-        plt.show()
+            # New metric
+            self._figures.append(plt.figure())
+            ax = self._figures[1].add_subplot(111)
+            ax.grid(linestyle='--')
+            self._axes.append([ax])
+            new_metrics = list()
+            for threshold_index, threshold in enumerate(experiment.thresholds):
+                new_metrics.append(experiment.new_metrics[threshold_index].net_expected_cost)
+            ax.plot(experiment.thresholds, new_metrics)
+            self._axes[1][0].set_xlabel('Threshold')
+            self._axes[1][0].set_ylabel('New Metric')
+            self._axes[1][0].set_title('New Metric')
 
-        print 'Threshold (rows) vs. Corruption Level (Columns)'
-        print 'Pairwise Precision'
-        np.set_printoptions(precision=5, suppress=True)  # no scientific notation
-        print pairwise_precision_array
-        print 'Pairwise Recall'
-        print pairwise_recall_array
-        print 'Pairwise F1'
-        print pairwise_f1_array
+            # Number of entities
+            self._figures.append(plt.figure())
+            ax = self._figures[2].add_subplot(111)
+            ax.grid(linestyle='--')
+            self._axes.append([ax])
+            number_entities = list()
+            for threshold_index, threshold in enumerate(experiment.thresholds):
+                number_entities.append(experiment.metrics[threshold_index].number_entities)
+            ax.plot(experiment.thresholds, number_entities)
+            self._axes[2][0].set_xlabel('Threshold')
+            self._axes[2][0].set_ylabel('Number of Entities')
+            self._axes[2][0].set_title('Number of Resolved Entities')
+
+            # Closest cluster metrics
+            self._figures.append(plt.figure())
+            ax = self._figures[3].add_subplot(111)
+            ax.grid(linestyle='--')
+            self._axes.append([ax])
+            closest_cluster_f1 = list()
+            closest_cluster_precision = list()
+            closest_cluster_recall = list()
+            for threshold_index, threshold in enumerate(experiment.thresholds):
+                closest_cluster_f1.append(experiment.metrics[threshold_index].closest_cluster_f1)
+                closest_cluster_precision.append(experiment.metrics[threshold_index].closest_cluster_precision)
+                closest_cluster_recall.append(experiment.metrics[threshold_index].closest_cluster_recall)
+            ax.plot(experiment.thresholds, closest_cluster_f1, label='Closest Cluster F1')
+            ax.plot(experiment.thresholds, closest_cluster_precision, label='Closest Cluster Precision')
+            ax.plot(experiment.thresholds, closest_cluster_recall, label='Closest Cluster Recall')
+            plt.legend(loc='upper left')
+            self._axes[3][0].set_xlabel('Threshold')
+            self._axes[3][0].set_ylabel('Score')
+            self._axes[3][0].set_title('Closest Cluster Metrics')
+            self._axes[3][0].set_ylim([0, 1.0])
+
+
+
+            plt.show()
+
+    def __init__(self, database_train, database_test, labels_train, labels_test, thresholds, train_pair_seed=None):
+        """
+        Performs entity resolution on a database at varying thresholds
+        :param database_train: Database object for training
+        :param database_test: Database object for testing
+        :param labels_train: A dictionary of the true labels [record id, label]
+        :param labels_test: A dictionary of the true labels [record id, label]
+        :param thresholds: List of thresholds to run ER at
+        :param train_seed:
+        """
+        self._database_train = database_train
+        self._database_test = database_test
+        self._labels_train = labels_train
+        self._labels_test = labels_test
+        self.thresholds = thresholds
+        if train_pair_seed:
+            self._train_pair_seed = train_pair_seed
+        else:
+            self._train_pair_seed = generate_pair_seed(self._database_train, self._labels_train, 300, balancing=True)
+        self._predicted_labels, self.metrics, self._er, self.new_metrics = self.run()
+
+    def run(self):
+        """
+        Runs ER at all thresholds
+        :return predicted_labels: List of lists of predicted labels.
+                                  predicted_labels[threshold_index] = dict [identifier, cluster label]
+        :return metrics: List of lists of metric objects.
+                         metrics[threshold_index] = Metrics object
+        :return er_objects: List of EntityResolution objects.
+                            er_objects[threshold_index] = EntityResolution
+        :return new_metrics_objects: List of NewMetrics objects.
+                                    new_metrics_objects[threshold_index] = NewMetrics
+        """
+        er = EntityResolution()
+        weak_match_function = er.train(self._database_train, self._labels_train, 100, balancing=True,
+                                       pair_seed=self._train_pair_seed)
+        metrics_list = list()
+        labels_list = list()
+        er_list = list()
+        new_metrics_list = list()
+        for threshold in self.thresholds:
+            labels_pred = er.run(self._database_test, weak_match_function, threshold, single_block=True,
+                                 match_type='weak', max_block_size=np.Inf, cores=1)
+            er_deepcopy = deepcopy(er)
+            er_list.append(er_deepcopy)
+            metrics_list.append(Metrics(self._labels_test, labels_pred))
+            new_metrics_list.append(NewMetrics(self._database_test, er_deepcopy))
+            labels_list.append(labels_pred)
+        return labels_list, metrics_list, er_list, new_metrics_list
 
 
 def main():
-    experiment = SyntheticExperiment(10, 10)
+    #### Synthetic Experiment ####
+    # synthetic_experiment = SyntheticExperiment(10, 10)
+    # synthetic_plot = synthetic_experiment.ResultsPlot(synthetic_experiment)
+    # pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
+
+    #### Real Experiment ####
+    thresholds = np.linspace(0, 1, 10)
+    features_path = 'data/restaurant/merged.csv'
+    database = Database(annotation_path=features_path)
+    database_train = database.sample_and_remove(400)
+    database_test = database
+    labels_path = 'data/restaurant/labels.csv'
+    labels = np.loadtxt(open(labels_path, 'rb'))
+    labels_train = dict()
+    labels_test = dict()
+    for identifier, label in enumerate(labels):
+        if identifier in database_train.records:
+            labels_train[identifier] = label
+        elif identifier in database_test.records:
+            labels_test[identifier] = label
+        else:
+            raise Exception('Record identifier not in either database')
+    experiment = Experiment(database_train, database_test, labels_train, labels_test, thresholds)
+    pickle.dump(experiment, open('experiment.p', 'wb'))
     plot = experiment.ResultsPlot(experiment)
-    #experiment.plot_metrics()
+    print 'Finished'
 
 if __name__ == '__main__':
     cProfile.run('main()')

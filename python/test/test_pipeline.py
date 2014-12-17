@@ -1,9 +1,9 @@
 import unittest
-from pipeline import fast_strong_cluster
-from entityresolution import EntityResolution
-from database import Database
-from blocking import BlockingScheme
-from metrics import _cluster
+from python.pipeline import fast_strong_cluster
+from python.entityresolution import EntityResolution
+from python.database import Database
+from python.blocking import BlockingScheme
+from python.metrics import _cluster
 __author__ = 'mbarnes1'
 
 

@@ -1,5 +1,5 @@
 import unittest
-from metrics import Metrics, _cluster, _intersection_size, _number_pairs, _jaccard, _linearize
+from python.metrics import Metrics, _cluster, _intersection_size, _number_pairs, _jaccard, _linearize
 from sklearn import metrics as skmetrics
 import math
 import numpy as np

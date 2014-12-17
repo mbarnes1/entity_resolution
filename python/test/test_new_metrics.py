@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
-from experiments import SyntheticExperiment
-from new_metrics import NewMetrics
+from python.experiments import SyntheticExperiment
+from python.new_metrics import NewMetrics
 __author__ = 'mbarnes1'
 
 
@@ -41,7 +41,7 @@ class MyTestCase(unittest.TestCase):
         """
         Simply tests whether net_expected_cost runs
         """
-        net_path_cost = self._new_metric.net_expected_cost()
+        net_path_cost = self._new_metric.net_expected_cost
         print 'Net path cost:', net_path_cost
 
 

@@ -1,6 +1,6 @@
 import unittest
-from blocking import BlockingScheme
-from database import Database
+from python.blocking import BlockingScheme
+from python.database import Database
 import numpy as np
 __author__ = 'mbarnes1'
 

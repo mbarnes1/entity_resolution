@@ -1,8 +1,8 @@
 import unittest
-from entityresolution import EntityResolution, merge_duped_records
-from database import Database
-from blocking import BlockingScheme
-from pipeline import fast_strong_cluster
+from python.entityresolution import EntityResolution, merge_duped_records
+from python.database import Database
+from python.blocking import BlockingScheme
+from python.pipeline import fast_strong_cluster
 __author__ = 'mbarnes1'
 from copy import deepcopy
 

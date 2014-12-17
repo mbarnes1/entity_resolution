@@ -1,10 +1,10 @@
 __author__ = 'mbarnes1'
 import unittest
-from pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
-    binary_match, get_x1, get_x2, get_pairwise_features, generate_pair_seed
-from pipeline import fast_strong_cluster
-from database import Database
-from blocking import BlockingScheme
+from python.pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
+    binary_match, get_x1, get_x2, get_pairwise_features, generate_pair_seed, get_precomputed_x2, levenshtein
+from python.pipeline import fast_strong_cluster
+from python.database import Database
+from python.blocking import BlockingScheme
 import numpy as np
 from math import isnan
 
@@ -130,6 +130,19 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(binary_match(x_a, x_b), 1)
         self.assertEqual(binary_match(x_a, x_d), 0)
         self.assertTrue(isnan(binary_match(x_a, x_c)))
+
+    def test_levenshtein(self):
+        r1 = {'Matthew'}
+        r2 = {'Matt'}
+        d = levenshtein(r1, r2)
+        self.assertEqual(d, 3)
+        r1 = {'abcd', 'efgh', 'ijkl'}
+        r2 = {'abbb', 'egfe', 'i'}
+        d = levenshtein(r1, r2)
+        self.assertEqual(d, 2)
+        d = levenshtein(r1, r1)
+        self.assertEqual(d, 0)
+
 
 if __name__ == '__main__':
     unittest.main()
