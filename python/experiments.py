@@ -417,31 +417,31 @@ class Experiment(object):
 
 def main():
     #### Synthetic Experiment ####
-    # synthetic_experiment = SyntheticExperiment(10, 10)
-    # synthetic_plot = synthetic_experiment.ResultsPlot(synthetic_experiment)
-    # pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
+    synthetic_experiment = SyntheticExperiment(10, 10)
+    synthetic_plot = synthetic_experiment.ResultsPlot(synthetic_experiment)
+    pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
 
     #### Real Experiment ####
-    thresholds = np.linspace(0, 1, 10)
-    features_path = 'data/restaurant/merged.csv'
-    database = Database(annotation_path=features_path)
-    database_train = database.sample_and_remove(400)
-    database_test = database
-    labels_path = 'data/restaurant/labels.csv'
-    labels = np.loadtxt(open(labels_path, 'rb'))
-    labels_train = dict()
-    labels_test = dict()
-    for identifier, label in enumerate(labels):
-        if identifier in database_train.records:
-            labels_train[identifier] = label
-        elif identifier in database_test.records:
-            labels_test[identifier] = label
-        else:
-            raise Exception('Record identifier not in either database')
-    experiment = Experiment(database_train, database_test, labels_train, labels_test, thresholds)
-    pickle.dump(experiment, open('experiment.p', 'wb'))
-    plot = experiment.ResultsPlot(experiment)
-    print 'Finished'
+    # thresholds = np.linspace(0, 1, 10)
+    # features_path = 'data/restaurant/merged.csv'
+    # database = Database(annotation_path=features_path)
+    # database_train = database.sample_and_remove(400)
+    # database_test = database
+    # labels_path = 'data/restaurant/labels.csv'
+    # labels = np.loadtxt(open(labels_path, 'rb'))
+    # labels_train = dict()
+    # labels_test = dict()
+    # for identifier, label in enumerate(labels):
+    #     if identifier in database_train.records:
+    #         labels_train[identifier] = label
+    #     elif identifier in database_test.records:
+    #         labels_test[identifier] = label
+    #     else:
+    #         raise Exception('Record identifier not in either database')
+    # experiment = Experiment(database_train, database_test, labels_train, labels_test, thresholds)
+    # pickle.dump(experiment, open('experiment.p', 'wb'))
+    # plot = experiment.ResultsPlot(experiment)
+    # print 'Finished'
 
 if __name__ == '__main__':
     cProfile.run('main()')

@@ -1,6 +1,7 @@
 """
 All pairwise features and functions. This includes training and testing the match function.
 """
+import sklearn
 from sklearn import linear_model
 import numpy as np
 import random
@@ -8,6 +9,8 @@ from roc import RocCurve
 from itertools import izip
 import Levenshtein
 __author__ = 'mbarnes1'
+if sklearn.__version__ != '0.16-git':
+    raise Exception('Invalid version of sklearn')
 
 
 class SurrogateMatchFunction(object):
@@ -17,7 +20,7 @@ class SurrogateMatchFunction(object):
     def __init__(self, decision_threshold=1):
         self.x2_mean = []
         self.roc = []
-        self.logreg = linear_model.LogisticRegression()
+        self.logreg = linear_model.LogisticRegression(solver='lbfgs')
         self.decision_threshold = decision_threshold
 
     def train(self, database_train, labels_train, number_samples, balancing=True, pair_seed=None):
