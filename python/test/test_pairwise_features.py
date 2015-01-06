@@ -1,12 +1,13 @@
 __author__ = 'mbarnes1'
 import unittest
-from python.pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
+from pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
     binary_match, get_x1, get_x2, get_pairwise_features, generate_pair_seed, get_precomputed_x2, levenshtein
-from python.pipeline import fast_strong_cluster
-from python.database import Database
-from python.blocking import BlockingScheme
+from pipeline import fast_strong_cluster
+from database import Database
+from blocking import BlockingScheme
 import numpy as np
 from math import isnan
+from copy import deepcopy
 
 
 class MyTestCase(unittest.TestCase):
@@ -53,10 +54,10 @@ class MyTestCase(unittest.TestCase):
         self.assertFalse(self._surrogate.match(r0, r2, 'strong')[0])
         self.assertFalse(self._surrogate.match(r1, r2, 'strong')[0])
         self.assertFalse(self._surrogate.match(r2, r3, 'strong')[0])
-        self.assertTrue(self._surrogate.match(r0, r0, 'strong')[0])
-        self.assertTrue(self._surrogate.match(r1, r1, 'strong')[0])
-        self.assertTrue(self._surrogate.match(r2, r2, 'strong')[0])
-        self.assertTrue(self._surrogate.match(r3, r3, 'strong')[0])
+        self.assertTrue(self._surrogate.match(r0, deepcopy(r0), 'exact')[0])
+        self.assertTrue(self._surrogate.match(r1, deepcopy(r1), 'exact')[0])
+        self.assertTrue(self._surrogate.match(r2, deepcopy(r2), 'exact')[0])
+        self.assertTrue(self._surrogate.match(r3, deepcopy(r3), 'exact')[0])
 
     def test_test(self):
         database = Database('test_annotations_10000_cleaned.csv')
@@ -84,26 +85,26 @@ class MyTestCase(unittest.TestCase):
     def test_get_x2(self):
         r0 = self._database.records[0]
         x2 = get_x2(r0, r0)
-        self.assertEqual(x2[0], 1)
-        self.assertEqual(x2[1], 0)
-        self.assertEqual(x2[2], 1)
-        self.assertEqual(x2[3], 1)
-        self.assertEqual(x2[4], 1)
-        self.assertEqual(x2[5], 0)
-        self.assertTrue(isnan(x2[6]))
-        self.assertTrue(isnan(x2[7]))
-        self.assertTrue(isnan(x2[8]))
-        self.assertTrue(isnan(x2[9]))
-        self.assertTrue(isnan(x2[10]))
-        self.assertTrue(isnan(x2[11]))
-        self.assertTrue(isnan(x2[12]))
-        self.assertTrue(isnan(x2[13]))
-        self.assertTrue(isnan(x2[14]))
-        self.assertTrue(isnan(x2[15]))
-        self.assertTrue(isnan(x2[16]))
-        self.assertTrue(isnan(x2[17]))
-        self.assertTrue(isnan(x2[18]))
-        self.assertEqual(x2[19], 3)
+        self.assertEqual(x2[0], 0) # [1], binary match
+        self.assertEqual(x2[1], 0) # [2], date diff
+        self.assertEqual(x2[2], 0) # [3], bin
+        self.assertEqual(x2[3], 0) # [4], bin
+        self.assertEqual(x2[4], 0) # [7] bin
+        self.assertEqual(x2[5], 0) # [8] num diff
+        self.assertTrue(isnan(x2[6]))  # [9] bin
+        self.assertTrue(isnan(x2[7]))  # [10]  num diff
+        self.assertTrue(isnan(x2[8]))  # [11]  num diff
+        self.assertTrue(isnan(x2[9]))  # [12]  bin
+        self.assertTrue(isnan(x2[10]))  # [13]   num diff
+        self.assertTrue(isnan(x2[11]))  # [14]   num diff
+        self.assertTrue(isnan(x2[12]))  # [15]   num diff
+        self.assertTrue(isnan(x2[13]))  # [16] bin
+        self.assertTrue(isnan(x2[14]))  # [17] bin
+        self.assertTrue(isnan(x2[15]))  # [18] bin
+        self.assertTrue(isnan(x2[16]))  # [19] bin
+        self.assertTrue(isnan(x2[17]))  # [24] bin
+        self.assertTrue(isnan(x2[18]))  # [25] bin
+        self.assertEqual(x2[19], np.exp(-3))  # [26] number matches
 
     def test_number_matches(self):
         x_a = {1, 2, 3}

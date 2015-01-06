@@ -8,7 +8,7 @@ class Record(object):
     """
     This object represents a single ad or entity.
     """
-    def __init__(self, line_index=0, feature_descriptor=0):
+    def __init__(self, line_index=0, feature_descriptor=None):
         """
         :param line_index: Unique ad number for identification
         :param feature_descriptor: FeatureDescriptor object
@@ -68,9 +68,18 @@ class Record(object):
                     features.add(name + '_' + str(subfeature))
         return features
 
-    def display(self, names):
-        for name, feature in izip(names, self.features):
-            print '{0}: {1}'.format(name, feature)
+    def display(self, indent=''):
+        """
+        Displays the record feature and names (if available)
+        :param indent:
+        """
+        if self.feature_descriptor:
+            for name, feature in izip(self.feature_descriptor.names, self.features):
+                print indent, '{0}: {1}'.format(name, feature)
+        else:
+            for feature in self.features:
+                print indent, feature
+
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__

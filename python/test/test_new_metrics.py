@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
-from python.experiments import SyntheticExperiment
-from python.new_metrics import NewMetrics
+from experiments import SyntheticExperiment
+from new_metrics import NewMetrics
 __author__ = 'mbarnes1'
 
 

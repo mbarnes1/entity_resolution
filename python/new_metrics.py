@@ -1,5 +1,6 @@
 from itertools import izip
 from copy import deepcopy
+import cPickle as pickle
 __author__ = 'mbarnes1'
 
 
@@ -10,9 +11,11 @@ class NewMetrics(object):
         :param database: Reference to Database object
         :param entity_resolution: Reference to EntityResolution object
         """
+        print 'Evaluating new metric...'
         self.database = database
         self.er = entity_resolution
         self.net_expected_cost = self.get_net_expected_cost()
+        print 'new metric evaluated.'
 
     def _get_records(self, entity_index):
         """
@@ -35,6 +38,9 @@ class NewMetrics(object):
         records = self._get_records(entity_index)
         swooshed, probability_list, strength_list = self.er.rswoosh(records, guarantee_random=True)
         if len(swooshed) != 1:
+            print 'Invalid entity found. Dumping results.'
+            pickle.dump(self, open('invalid_entity_new_metric.p', 'wb'))
+            pickle.dump(records, open('invalid_entity_records.p', 'wb'))
             raise Exception('Invalid entity, no path exists')
         path_cost = list()
         for strength, probability in izip(strength_list, probability_list):
@@ -69,6 +75,46 @@ class NewMetrics(object):
             expected_cost = self._expected_path_cost(entity_index)
             net_cost += expected_cost
         return net_cost
+
+    def get_net_greedy_cost(self, type='worst'):
+        """
+        Computes the sum of the greedy path cost over all entities
+        :param type: string, 'best' or 'worst'
+        :return net_cost:
+        """
+        entity_indices = range(0, len(self.er.entities))
+        net_cost = 0
+        for entity_index in entity_indices:
+            expected_cost = self._greedy_cost(entity_index, type=type)
+            net_cost += expected_cost
+        return net_cost
+
+    def _greedy_cost(self, entity_index, type='worst'):
+        """
+        Find the greedily best or worst merge path cost for a single entity,
+        defined as the path with highest or lowest cost at each step
+        :param entity_index:
+        :param type: string, 'best' or 'worst'
+        :return cost: the greedily best or worst path cost
+        """
+        records = self._get_records(entity_index)
+        ## Pairwise cost matrix. Merge pair w/ smallest value (above threshold) in matrix
+        ## Recompute all pairs w/ merged entity
+        ## Repeat process
+
+
+        swooshed, probability_list, strength_list = self.er.rswoosh(records, guarantee_random=True)
+        if len(swooshed) != 1:
+            print 'Invalid entity found. Dumping results.'
+            pickle.dump(self, open('invalid_entity_new_metric.p', 'wb'))
+            pickle.dump(records, open('invalid_entity_records.p', 'wb'))
+            raise Exception('Invalid entity, no path exists')
+        path_cost = list()
+        for strength, probability in izip(strength_list, probability_list):
+            if strength != 'none':  # if it was a match (valid path)
+                path_cost.append(_cost_function(probability))
+        return path_cost
+
 
 
 def _cost_function(prob):

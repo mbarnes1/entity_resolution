@@ -15,6 +15,7 @@ class Metrics(object):
         :param labels_true: True cluster label of each sample. Dictionary of form [ad id, cluster label].
         Note: these are cluster labels, not class labels. The values do not have to correspond.
         """
+        print 'Evaluating metrics...'
         self._n = float(len(labels_pred))
         self._labels_true = labels_true
         self._labels_pred = labels_pred
@@ -31,6 +32,7 @@ class Metrics(object):
         self.purity = self._purity()
         self._entity_sizes_pred = _get_entity_sizes(self._clusters_pred)
         self._entity_sizes_true = _get_entity_sizes(self._clusters_true)
+        print 'metrics evaluated.'
 
     def _pairwise_precision_recall_f1(self):
         """

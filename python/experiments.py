@@ -153,14 +153,14 @@ class SyntheticExperiment(object):
 
     def __init__(self, number_entities, records_per_entity):
         ## Parameters ##
-        self.corruption_multipliers = np.linspace(0, 0.1, 10)
+        self.corruption_multipliers = np.linspace(0, 0.05, 3)
         self.thresholds = np.linspace(0, 1, 10)
         ################
         uncorrupted_synthetic = SyntheticDatabase(number_entities, records_per_entity, number_features=2, sigma=0)
         self._uncorrupted_synthetic_train = uncorrupted_synthetic.sample_and_remove(float(number_entities) *
                                                                                     records_per_entity/2)
         self._train_pair_seed = generate_pair_seed(self._uncorrupted_synthetic_train.database,
-                                                   self._uncorrupted_synthetic_train.labels, 300, balancing=True)
+                                                   self._uncorrupted_synthetic_train.labels, 300, balance_seed=True)
         self.uncorrupted_synthetic_test = uncorrupted_synthetic
         self._synthetic_train = list()
         self.synthetic_test = list()
@@ -284,6 +284,7 @@ class Experiment(object):
             """
             :param experiment: Experiment parent object
             """
+            print 'Plotting experimental results...'
             self._experiment = experiment
 
             self._threshold_index = 0
@@ -320,10 +321,10 @@ class Experiment(object):
             self._axes.append([ax])
             new_metrics = list()
             for threshold_index, threshold in enumerate(experiment.thresholds):
-                new_metrics.append(experiment.new_metrics[threshold_index].net_expected_cost)
+                new_metrics.append(-1*experiment.new_metrics[threshold_index].net_expected_cost)
             ax.plot(experiment.thresholds, new_metrics)
             self._axes[1][0].set_xlabel('Threshold')
-            self._axes[1][0].set_ylabel('New Metric')
+            self._axes[1][0].set_ylabel('-New Metric')
             self._axes[1][0].set_title('New Metric')
 
             # Number of entities
@@ -364,7 +365,7 @@ class Experiment(object):
 
             plt.show()
 
-    def __init__(self, database_train, database_test, labels_train, labels_test, thresholds, train_pair_seed=None):
+    def __init__(self, database_train, database_test, labels_train, labels_test, thresholds, train_pair_seed=None, train_size=None, test_size=100):
         """
         Performs entity resolution on a database at varying thresholds
         :param database_train: Database object for training
@@ -372,17 +373,22 @@ class Experiment(object):
         :param labels_train: A dictionary of the true labels [record id, label]
         :param labels_test: A dictionary of the true labels [record id, label]
         :param thresholds: List of thresholds to run ER at
-        :param train_seed:
+        :param train_pair_seed: List of pairs to use in training, to avoid random fluctuations in performance
+        :param train_size: Number of pairs to train with, if not given train_pair_seed
+        :param test_size: Number of pairs to test weak function
         """
         self._database_train = database_train
         self._database_test = database_test
         self._labels_train = labels_train
         self._labels_test = labels_test
+        self._test_size = test_size
         self.thresholds = thresholds
         if train_pair_seed:
             self._train_pair_seed = train_pair_seed
         else:
-            self._train_pair_seed = generate_pair_seed(self._database_train, self._labels_train, 300, balancing=True)
+            print 'Generating pairwise seed for training database'
+            self._train_pair_seed = generate_pair_seed(self._database_train, self._labels_train, train_size,
+                                                       balance_seed=True)
         self._predicted_labels, self.metrics, self._er, self.new_metrics = self.run()
 
     def run(self):
@@ -398,13 +404,18 @@ class Experiment(object):
                                     new_metrics_objects[threshold_index] = NewMetrics
         """
         er = EntityResolution()
-        weak_match_function = er.train(self._database_train, self._labels_train, 100, balancing=True,
+        train_size = len(self._train_pair_seed)
+        weak_match_function = er.train(self._database_train, self._labels_train, train_size, balancing=True,
                                        pair_seed=self._train_pair_seed)
+        print 'Testing pairwise match function on test database with ROC curve'
+        ROC = weak_match_function.test(self._database_test, self._labels_test, test_size=self._test_size)
+        ROC.make_plot()
         metrics_list = list()
         labels_list = list()
         er_list = list()
         new_metrics_list = list()
         for threshold in self.thresholds:
+            print 'Running entity resolution at threshold =', threshold
             labels_pred = er.run(self._database_test, weak_match_function, threshold, single_block=True,
                                  match_type='weak', max_block_size=np.Inf, cores=1)
             er_deepcopy = deepcopy(er)
@@ -417,31 +428,44 @@ class Experiment(object):
 
 def main():
     #### Synthetic Experiment ####
-    synthetic_experiment = SyntheticExperiment(10, 10)
-    synthetic_plot = synthetic_experiment.ResultsPlot(synthetic_experiment)
-    pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
+    # synthetic_experiment = SyntheticExperiment(10, 10)
+    # synthetic_plot = synthetic_experiment.ResultsPlot(synthetic_experiment)
+    # pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
+
 
     #### Real Experiment ####
-    # thresholds = np.linspace(0, 1, 10)
-    # features_path = 'data/restaurant/merged.csv'
-    # database = Database(annotation_path=features_path)
-    # database_train = database.sample_and_remove(400)
-    # database_test = database
-    # labels_path = 'data/restaurant/labels.csv'
-    # labels = np.loadtxt(open(labels_path, 'rb'))
-    # labels_train = dict()
-    # labels_test = dict()
-    # for identifier, label in enumerate(labels):
-    #     if identifier in database_train.records:
-    #         labels_train[identifier] = label
-    #     elif identifier in database_test.records:
-    #         labels_test[identifier] = label
-    #     else:
-    #         raise Exception('Record identifier not in either database')
-    # experiment = Experiment(database_train, database_test, labels_train, labels_test, thresholds)
-    # pickle.dump(experiment, open('experiment.p', 'wb'))
-    # plot = experiment.ResultsPlot(experiment)
-    # print 'Finished'
+    number_thresholds = 25
+    dataset_name = 'restaurant'  # restaurant,
+
+    if dataset_name == 'restaurant':
+        features_path = 'data/restaurant/merged.csv'
+        labels_path = 'data/restaurant/labels.csv'
+        train_database_size = 600
+        number_train_pairs = 100
+        number_test_pairs = 15
+    else:
+        raise Exception('Invalid dataset name')
+
+    thresholds = np.linspace(0, 1, number_thresholds)
+    database = Database(annotation_path=features_path)
+    database_train = database.sample_and_remove(train_database_size)
+    database_test = database
+    labels = np.loadtxt(open(labels_path, 'rb'))
+    labels_train = dict()
+    labels_test = dict()
+    for identifier, label in enumerate(labels):
+        if identifier in database_train.records:
+            labels_train[identifier] = label
+        elif identifier in database_test.records:
+            labels_test[identifier] = label
+        else:
+            raise Exception('Record identifier not in either database')
+    experiment = Experiment(database_train, database_test, labels_train, labels_test, thresholds,
+                            train_size=number_train_pairs, test_size=number_test_pairs)
+    print 'Saving results'
+    pickle.dump(experiment, open('experiment.p', 'wb'))
+    plot = experiment.ResultsPlot(experiment)
+    print 'Finished'
 
 if __name__ == '__main__':
     cProfile.run('main()')

@@ -1,15 +1,20 @@
 __author__ = 'mbarnes1'
 import numpy as np
+from itertools import izip
 
 
 class RocCurve(object):
     def __init__(self, labels, prob):
+        print 'Calculating TPR & FPR...'
         ind = np.argsort(-prob)  # sort in descending order
         labels = labels.astype('bool')
         self.labels = labels[ind]
         self.prob = prob[ind]
         self.tpr = np.cumsum(self.labels).astype('float')/np.sum(self.labels)
         self.fpr = np.cumsum(~self.labels).astype('float')/np.sum(~self.labels)
+        print '     Threshold, FPR, TPR'
+        for prob, fpr, tpr in izip(self.prob, self.fpr, self.tpr):
+            print "{:10.4f}, {:10.4f}, {:10.4f}".format(prob, fpr, tpr)
 
     # Write tpr and fpr to a flat file
     def write(self, path):

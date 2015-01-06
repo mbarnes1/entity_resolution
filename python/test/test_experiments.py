@@ -1,6 +1,6 @@
 import unittest
-import numpy as np
-from python.experiments import SyntheticExperiment
+import sys
+from experiments import SyntheticExperiment
 __author__ = 'mbarnes1'
 
 

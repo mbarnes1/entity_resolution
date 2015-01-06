@@ -1,10 +1,12 @@
 """
 All pairwise features and functions. This includes training and testing the match function.
 """
+import sys
+print sys.path
 import sklearn
 from sklearn import linear_model
 import numpy as np
-import random
+from math import e
 from roc import RocCurve
 from itertools import izip
 import Levenshtein
@@ -35,7 +37,20 @@ class SurrogateMatchFunction(object):
         """
         x1_train, x2_train, self.x2_mean = get_pairwise_features(database_train, labels_train, number_samples,
                                                                  balancing, pair_seed=pair_seed)
+        bounds = list()
+        for _ in range(x2_train.shape[1]):
+            bounds.append((None, 0))  # restrict all feature weights to be negative (convex set)
+        bounds.append((None, None))  # no bounds for the constant offset term
+        print 'Training Logistic Regression pairwise match function...'
+        print '     Pos/Neg training sample class split: ', sum(x1_train), '/', len(x1_train) - sum(x1_train)
+        print '     Enforcing weight vector bounds:'
+        for counter, bound in enumerate(bounds):
+            print '         Feature', counter, ': ', bounds
+        print '         (last term is intercept)'
+        self.logreg.bounds = bounds
         self.logreg.fit(x2_train, x1_train)
+        print 'Model coefficients: ', self.logreg.coef_
+        print 'Intercept: ', self.logreg.intercept_
 
     def test(self, database_test, labels_test, test_size=1000):
         """
@@ -44,18 +59,29 @@ class SurrogateMatchFunction(object):
         :param test_size: Number of pairwise samples to use in testing
         :return RocCurve: An RocCurve object
         """
-        x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, test_size, True)
+        pair_seed = generate_pair_seed(database_test, labels_test, test_size, True)
+        x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, test_size, True, pair_seed=pair_seed)
         x1_bar_probability = self.logreg.predict_proba(x2_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))
         #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
-        return RocCurve(x1_test, x1_bar_probability)
+        roc = RocCurve(x1_test, x1_bar_probability)
+
+        sorted_indices = np.argsort(-1*x1_bar_probability)
+        for sorted_index in sorted_indices:
+            x1_bar = x1_bar_probability[sorted_index]
+            pair = pair_seed[sorted_index]
+            print 'Test pair P(match) = ', x1_bar
+            database_test.records[pair[0]].display(indent='     ')
+            print '     ----'
+            database_test.records[pair[1]].display(indent='     ')
+        return roc
 
     def match(self, r1, r2, match_type):
         """
         Determines if two records match
         :param r1: Record object
         :param r2: Record object
-        :param match_type: Match type use in ER algorithm. String 'strong', 'weak', or 'weak_strong'
+        :param match_type: Match type use in ER algorithm. String 'exact', 'strong', 'weak', or 'weak_strong'
         :return: False or True, whether r1 and r2 match
         :return p_x1: Probability of weak match
         :return strength: Type of matches that occurred. 'strong', 'weak', 'both', or 'none'
@@ -67,7 +93,10 @@ class SurrogateMatchFunction(object):
         np.copyto(x2, self.x2_mean, where=np.isnan(x2))  # mean imputation
         p_x1 = self.logreg.predict_proba(x2)[0, 1]
         x1_hat = p_x1 > self.decision_threshold
-        if x1 and x1_hat:
+        if r1 == r2:
+            strength = 'exact'  # if records are the same, to satisfy Idempotence property
+            return True, p_x1, strength
+        elif x1 and x1_hat:
             strength = 'both'  # both match
             return True, p_x1, strength
         elif x1:
@@ -87,13 +116,13 @@ class SurrogateMatchFunction(object):
             return False, p_x1, strength
 
 
-def generate_pair_seed(database, labels_train, number_samples, balancing):
+def generate_pair_seed(database, labels, number_samples, balance_seed):
     """
     Generates list of pairs to seed from. Useful for removing random process noise for tests on related datasets
     :param database: Database object
-    :param labels_train: Cluster labels of database. Dictionary [identifier, cluster label]
+    :param labels: Cluster labels of database. Dictionary [identifier, cluster label]
     :param number_samples: Number of samples in pair seed
-    :param balancing: Boolean, whether to balance match/mismatch classes
+    :param balance_seed: Boolean, whether to balance match/mismatch classes
     :return pair_seed: List of pairs, where each pair is a vector of form (identifierA, identifierB)
     """
     if len(database.records)*(len(database.records)-1)/2 < number_samples:
@@ -102,29 +131,35 @@ def generate_pair_seed(database, labels_train, number_samples, balancing):
     pairs = set()
     cluster_to_records = dict()
     line_indices = database.records.keys()
-    print 'Creating cluster to identifier hash table'
-    for index, cluster in labels_train.iteritems():
+    print '     Creating cluster to identifier hash table'
+    for index, cluster in labels.iteritems():
         if cluster in cluster_to_records:
             cluster_to_records[cluster].append(index)
         else:
             cluster_to_records[cluster] = [index]
     cluster_keys = cluster_to_records.keys()
-    cluster_sizes = []  # probability of randomly selecting a pair from a cluster
-    number_pairs = 0
-    print 'Calculating number of pairs in each cluster, for cluster sampling probability'
+    cluster_pair_sizes = []  # number of remaining pairs in each cluster
+    print '     Calculating number of pairs in each cluster, for cluster sampling probability'
     for key in cluster_keys:
         records = cluster_to_records[key]
         cluster_pairs = float(len(records))*(len(records)-1)/2
-        cluster_sizes.append(cluster_pairs)
-        number_pairs += cluster_pairs
-    cluster_prob = [size/number_pairs for size in cluster_sizes]
-    counter = 0
-    while len(pairs) < number_samples:
-        print 'Sampling pair', counter
-        to_balance = random.choice([True, False])
-        if balancing and to_balance:
-            print 'Sampling pair from within cluster'
-            cluster = np.random.choice(cluster_keys, p=cluster_prob)
+        cluster_pair_sizes.append(cluster_pairs)
+    number_remaining_pairs = sum(cluster_pair_sizes)
+    cluster_prob = [size/number_remaining_pairs for size in cluster_pair_sizes]
+    cluster_prob = np.array(cluster_prob)
+    within_cluster_pairs = 0
+    between_cluster_pairs = 0
+    to_balance_indices = np.random.choice(range(0, number_samples), int(number_samples/2), replace=False)  # indices of seed to balance
+    samples_to_balance = np.zeros(number_samples)
+    samples_to_balance[to_balance_indices] = 1
+    if number_remaining_pairs < sum(samples_to_balance) and balance_seed:
+        raise Exception('Not enough within cluster pairs to properly balance classes. Requested {0:.0f}, but only '
+                        '{1:.0f} available'.format(len(samples_to_balance), number_remaining_pairs))
+    for balance_this_sample in samples_to_balance:
+        if balance_this_sample and balance_seed:
+            print '     Trying to sample pair from within cluster...',
+            cluster_index = np.random.choice(range(0, len(cluster_keys)), p=cluster_prob)
+            cluster = cluster_keys[cluster_index]
             pair = None
             while not pair:
                 pair = tuple(np.random.choice(cluster_to_records[cluster], size=2, replace=False))
@@ -132,20 +167,42 @@ def generate_pair_seed(database, labels_train, number_samples, balancing):
                 if (pair[0] != pair[1]) and \
                         (pair not in pairs) and \
                         (pair_flipped not in pairs):  # valid pair, not used before
+                    print 'successful.'
                     pairs.add(pair)
+                    within_cluster_pairs += 1
+                    print '         Updating this cluster probability from', cluster_prob[cluster_index],
+                    cluster_prob[cluster_index] -= 1.0/number_remaining_pairs
+                    if abs(cluster_prob[cluster_index]) < 0.0000001:  # if within E-7 of zero
+                        cluster_prob[cluster_index] = 0
+                    print 'to', cluster_prob[cluster_index]
+                    number_remaining_pairs -= 1
+                    normalizer = sum(cluster_prob)
+                    cluster_prob = cluster_prob/normalizer
+                else:
+                    pair = None
         else:
-            print 'Sampling pair from between clusters'
             pair = None
             while not pair:
+                print '     Trying to sample pair from between clusters...',
                 pair = tuple(np.random.choice(line_indices, size=2, replace=False))
                 pair_flipped = (pair[1], pair[0])
-                if (labels_train[pair[0]] != labels_train[pair[1]]) and \
+                if (labels[pair[0]] != labels[pair[1]]) and \
                         (pair[0] != pair[1]) and \
                         (pair not in pairs) and \
                         (pair_flipped not in pairs):  # not in cluster, valid pair, not used before
                     pairs.add(pair)
-        counter += 1
+                    between_cluster_pairs += 1
+                    print 'successful.'
+                else:
+                    pair = None
+        database.records[pair[0]].display(indent='              ')
+        print '               ----'
+        database.records[pair[1]].display(indent='              ')
+        print '         Number of pairs within:', within_cluster_pairs, '   between:', between_cluster_pairs
     pairs = list(pairs)
+    print 'Finished generating pair seed.'
+    print '     Total number of within cluster pairs: ', within_cluster_pairs
+    print '     Total number of between cluster pairs: ', between_cluster_pairs
     return pairs
 
 
@@ -203,15 +260,19 @@ def get_x2(r1, r2):
                                                                   r1.feature_descriptor.strengths)):
         if strength == 'weak':
             if pairwise_use == 'binary_match':
-                x2.append(binary_match(f1, f2))
+                match = binary_match(f1, f2)
+                if not np.isnan(match):
+                    match = not match  # Inverting sign, want smaller feature = better match
+                                       # (restricting all log reg weights negative)
+                x2.append(match)
             elif pairwise_use == 'numerical_difference':
-                x2.append(numerical_difference(f1, f2))
+                x2.append(numerical_difference(f1, f2))  # smaller feature = better, OK
             elif pairwise_use == 'number_matches':
-                x2.append(number_matches(f1, f2))
+                x2.append(np.exp(-number_matches(f1, f2)))  # Using exp(-x) to get smaller feature = better match
             elif pairwise_use == 'special_date_difference':
-                x2.append(date_difference(f1, f2))
+                x2.append(date_difference(f1, f2))  # smaller feature = better, OK
             elif pairwise_use == 'levenshtein':
-                x2.append(levenshtein(f1, f2))
+                x2.append(np.log(e + levenshtein(f1, f2)))  # smaller feature = better, OK. Using log to decrease weight of large mismatches
             else:
                 raise Exception('Invalid pairwise use: ' + pairwise_use)
     x2 = np.asarray(x2)
@@ -245,7 +306,7 @@ def get_x1(r1, r2):
 
 def mean_imputation(x):
     """
-    Determines the column means of all non-NaN entries in matrix
+    Determines the column means of all non-NaN entries in matrix. Replaces NaN values in x
     :param x: n x m Matrix
     :return m: 1-D vector with m entries, the column means of non-NaN entries in x
     """

@@ -3,11 +3,12 @@ import cPickle as pickle  # for saving and loading shit, fast
 import numpy as np
 import multiprocessing
 from blocking import BlockingScheme
-from pairwise_features import SurrogateMatchFunction
+from pairwise_features import SurrogateMatchFunction, get_x2
 from copy import deepcopy
 import gc
 import random
 import traceback
+import os
 __author__ = 'mbarnes1'
 
 
@@ -88,7 +89,9 @@ class EntityResolution(object):
         self._match_function.decision_threshold = decision_threshold
         # Multiprocessing code
         if cores > 1:  # large job, use memory bufffer
-            memory_buffer = pickle.load(open('memory_buffer.p', 'rb'))  # so workers are allocated appropriate memory
+            this_path = os.path.dirname(os.path.realpath(__file__))
+            buffer_path = this_path + '/memory_buffer.p'
+            memory_buffer = pickle.load(open(buffer_path, 'rb'))  # so workers are allocated appropriate memory
         job_queue = multiprocessing.Queue()
         results_queue = multiprocessing.Queue()
         workerpool = list()
@@ -179,6 +182,7 @@ class EntityResolution(object):
             for identifier in entity.line_indices:
                 identifier_to_cluster[identifier] = cluster_index
         return identifier_to_cluster
+        print 'entities merged.'
 
     def rswoosh(self, I, guarantee_random=False):
         """
@@ -217,6 +221,11 @@ class EntityResolution(object):
                     buddy = rnew
                     break  # Found a match!
             if buddy:
+                print 'Merging records with P(match) = ', prob
+                print '   x2: ', get_x2(currentrecord, rnew)
+                currentrecord.display(indent='  ')
+                print '   ----'
+                buddy.display(indent='  ')
                 currentrecord.merge(buddy)
                 I.add(currentrecord)
                 Inew.discard(buddy)

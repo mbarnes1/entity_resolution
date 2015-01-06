@@ -3,6 +3,7 @@ import numpy as np
 from numpy.random import choice
 import matplotlib.pyplot as plt
 from itertools import izip
+import sys
 __author__ = 'mbarnes1'
 
 
@@ -133,10 +134,11 @@ class Database(object):
         """
         self.records = dict()
         if annotation_path:
+            print sys.path
             ins = open(annotation_path, 'r')
             feature_names = next(ins).strip('\n').split(',')  # skip the first line, its a header
             feature_types = next(ins).strip('\n').split(',')  # variable type (e.g. int, string, date)
-            ignore_indices = find_in_list(feature_types, '')
+            ignore_indices = find_in_list(feature_types, 'ignore')
             feature_names = remove_indices(ignore_indices, feature_names)
             feature_types = remove_indices(ignore_indices, feature_types)
             feature_strengths = remove_indices(ignore_indices, next(ins).strip('\n').split(','))

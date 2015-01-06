@@ -1,6 +1,6 @@
 import unittest
 from copy import deepcopy
-from python.database import SyntheticDatabase, Database, remove_indices, find_in_list
+from database import SyntheticDatabase, Database, remove_indices, find_in_list
 import os
 import numpy as np
 import matplotlib.pyplot as plt
