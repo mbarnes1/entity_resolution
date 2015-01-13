@@ -58,18 +58,23 @@ class SyntheticExperiment(object):
             ax = self._figures[1].add_subplot(111)
             ax.grid(linestyle='--')
             self._axes.append([ax])
-            new_metrics = list()
+            new_metrics_expected = list()
+            new_metrics_best = list()
+            new_metrics_worst = list()
             for threshold_index, threshold in enumerate(experiment.thresholds):
-                new_metrics.append(experiment.new_metrics[self._corruption_index][threshold_index].net_expected_cost)
-            self.new_metrics, = ax.plot(experiment.thresholds, new_metrics)
-            self.new_metrics_dot, = ax.plot(experiment.thresholds[self._threshold_index],
-                                            new_metrics[self._threshold_index], 'bo', markersize=10,
-                                            label='Operating Point')
-            plt.legend(loc='upper left')
+                new_metrics_expected.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].net_expected_cost)
+                new_metrics_best.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].greedy_best_cost)
+                new_metrics_worst.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].greedy_worst_cost)
+            self.new_metrics_expected, = ax.plot(experiment.thresholds, new_metrics_expected, label='Expected')
+            self.new_metrics_best, = ax.plot(experiment.thresholds, new_metrics_best, label='Upper Greedy Bound')
+            self.new_metrics_worst, = ax.plot(experiment.thresholds, new_metrics_worst, label='Lower Greedy Bound')
+            plt.legend(handles=[self.new_metrics_expected, self.new_metrics_best, self.new_metrics_worst], loc='upper left')
+            # self.new_metrics_dot, = ax.plot(experiment.thresholds[self._threshold_index],
+            #                                 new_metrics_expected[self._threshold_index], 'bo', markersize=10,
+            #                                 label='Operating Point')
             self._axes[1][0].set_xlabel('Threshold')
-            self._axes[1][0].set_ylabel('New Metric')
-            self._axes[1][0].set_title('New Metric')
-
+            self._axes[1][0].set_ylabel('-New Metric')
+            self._axes[1][0].set_title('New Metric - Path Costs')
 
             # Plot the samples
             self._figures.append(plt.figure())
@@ -114,15 +119,21 @@ class SyntheticExperiment(object):
                                                                        color_seed=self._color_seed, ax=self._axes[-1][0])
                 self._experiment.synthetic_test[corruption_index].plot(predicted_labels, title='Predicted Clustering',
                                                                        color_seed=self._color_seed, ax=self._axes[-1][1])
+                new_metrics_expected = list()
+                new_metrics_best = list()
+                new_metrics_worst = list()
                 pairwise_f1 = list()
-                new_metrics = list()
                 for threshold_index, threshold in enumerate(self._experiment.thresholds):
                     pairwise_f1.append(self._experiment.metrics[corruption_index][threshold_index].pairwise_f1)
-                    new_metrics.append(self._experiment.new_metrics[corruption_index][threshold_index].net_expected_cost)
+                    new_metrics_expected.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].net_expected_cost)
+                    new_metrics_best.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].greedy_best_cost)
+                    new_metrics_worst.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].greedy_worst_cost)
                 self.pf1.set_ydata(pairwise_f1)
                 self.pf1_dot.set_ydata(pairwise_f1[self._threshold_index])
-                self.new_metrics.set_ydata(new_metrics)
-                self.new_metrics_dot.set_ydata(new_metrics[self._threshold_index])
+                self.new_metrics_expected.set_ydata(new_metrics_expected)
+                self.new_metrics_best.set_ydata(new_metrics_best)
+                self.new_metrics_worst.set_ydata(new_metrics_worst)
+                #self.new_metrics_dot.set_ydata(new_metrics[self._threshold_index])
                 self._figures[0].canvas.draw()
                 self._figures[1].canvas.draw()
                 self._corruption_index = corruption_index
@@ -144,23 +155,23 @@ class SyntheticExperiment(object):
                                                                        color_seed=self._color_seed, ax=self._axes[-1][1])
                 self.pf1_dot.set_xdata(self._experiment.thresholds[threshold_index])
                 self.pf1_dot.set_ydata(self._experiment.metrics[corruption_index][threshold_index].pairwise_f1)
-                self.new_metrics_dot.set_xdata(self._experiment.thresholds[threshold_index])
-                self.new_metrics_dot.set_ydata(self._experiment.new_metrics[corruption_index][threshold_index].
-                                               net_expected_cost)
+                #self.new_metrics_dot.set_xdata(self._experiment.thresholds[threshold_index])
+                #self.new_metrics_dot.set_ydata(self._experiment.new_metrics[corruption_index][threshold_index].
+                #                               net_expected_cost)
                 self._figures[0].canvas.draw()
                 self._figures[1].canvas.draw()
                 self._threshold_index = threshold_index
 
-    def __init__(self, number_entities, records_per_entity):
+    def __init__(self, number_entities, records_per_entity, number_thresholds):
         ## Parameters ##
-        self.corruption_multipliers = np.linspace(0, 0.05, 3)
-        self.thresholds = np.linspace(0, 1, 10)
+        self.corruption_multipliers = np.linspace(0, 0.025, 5)
+        self.thresholds = np.linspace(0, 1, number_thresholds)
         ################
         uncorrupted_synthetic = SyntheticDatabase(number_entities, records_per_entity, number_features=2, sigma=0)
         self._uncorrupted_synthetic_train = uncorrupted_synthetic.sample_and_remove(float(number_entities) *
                                                                                     records_per_entity/2)
         self._train_pair_seed = generate_pair_seed(self._uncorrupted_synthetic_train.database,
-                                                   self._uncorrupted_synthetic_train.labels, 300, balance_seed=True)
+                                                   self._uncorrupted_synthetic_train.labels, 150, balance_seed=True)
         self.uncorrupted_synthetic_test = uncorrupted_synthetic
         self._synthetic_train = list()
         self.synthetic_test = list()
@@ -197,8 +208,10 @@ class SyntheticExperiment(object):
         new_metrics_objects = list()
         for synthetic_train, synthetic_test in izip(self._synthetic_train, self.synthetic_test):
             er = EntityResolution()
-            weak_match_function = er.train(synthetic_train.database, synthetic_train.labels, 300, balancing=True,
-                                           pair_seed=self._train_pair_seed)
+            weak_match_function = er.train(synthetic_train.database, synthetic_train.labels, len(self._train_pair_seed),
+                                           balancing=True, pair_seed=self._train_pair_seed)
+            roc = weak_match_function.test(synthetic_test.database, synthetic_test.labels, 200)
+            roc.make_plot()
             metrics_sublist = list()
             labels_sublist = list()
             er_sublist = list()
@@ -319,13 +332,20 @@ class Experiment(object):
             ax = self._figures[1].add_subplot(111)
             ax.grid(linestyle='--')
             self._axes.append([ax])
-            new_metrics = list()
+            new_metric_expected = list()
+            new_metric_best = list()
+            new_metric_worst = list()
             for threshold_index, threshold in enumerate(experiment.thresholds):
-                new_metrics.append(-1*experiment.new_metrics[threshold_index].net_expected_cost)
-            ax.plot(experiment.thresholds, new_metrics)
+                new_metric_expected.append(-1*experiment.new_metrics[threshold_index].net_expected_cost)
+                new_metric_best.append(-1*experiment.new_metrics[threshold_index].greedy_best_cost)
+                new_metric_worst.append(-1*experiment.new_metrics[threshold_index].greedy_worst_cost)
+            l1, = ax.plot(experiment.thresholds, new_metric_expected, label='Expected')
+            l2, = ax.plot(experiment.thresholds, new_metric_best, label='Upper Greedy Bound')
+            l3, = ax.plot(experiment.thresholds, new_metric_worst, label='Lower Greedy Bound')
+            plt.legend(handles=[l1, l2, l3], loc='upper left')
             self._axes[1][0].set_xlabel('Threshold')
             self._axes[1][0].set_ylabel('-New Metric')
-            self._axes[1][0].set_title('New Metric')
+            self._axes[1][0].set_title('New Metric - Path Costs')
 
             # Number of entities
             self._figures.append(plt.figure())
@@ -360,9 +380,6 @@ class Experiment(object):
             self._axes[3][0].set_ylabel('Score')
             self._axes[3][0].set_title('Closest Cluster Metrics')
             self._axes[3][0].set_ylim([0, 1.0])
-
-
-
             plt.show()
 
     def __init__(self, database_train, database_test, labels_train, labels_test, thresholds, train_pair_seed=None, train_size=None, test_size=100):
@@ -427,44 +444,51 @@ class Experiment(object):
 
 
 def main():
-    #### Synthetic Experiment ####
-    # synthetic_experiment = SyntheticExperiment(10, 10)
-    # synthetic_plot = synthetic_experiment.ResultsPlot(synthetic_experiment)
-    # pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
-
-
     #### Real Experiment ####
     number_thresholds = 25
-    dataset_name = 'restaurant'  # restaurant,
+    dataset_name = 'synthetic'  # synthetic, restaurant, abt-buy
 
-    if dataset_name == 'restaurant':
-        features_path = 'data/restaurant/merged.csv'
-        labels_path = 'data/restaurant/labels.csv'
-        train_database_size = 600
-        number_train_pairs = 100
-        number_test_pairs = 15
+    if dataset_name == 'synthetic':
+        number_entities = 10
+        records_per_entity = 10
+        synthetic_experiment = SyntheticExperiment(number_entities, records_per_entity, number_thresholds)
+        synthetic_plot = synthetic_experiment.ResultsPlot(synthetic_experiment)
+        pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
     else:
-        raise Exception('Invalid dataset name')
-
-    thresholds = np.linspace(0, 1, number_thresholds)
-    database = Database(annotation_path=features_path)
-    database_train = database.sample_and_remove(train_database_size)
-    database_test = database
-    labels = np.loadtxt(open(labels_path, 'rb'))
-    labels_train = dict()
-    labels_test = dict()
-    for identifier, label in enumerate(labels):
-        if identifier in database_train.records:
-            labels_train[identifier] = label
-        elif identifier in database_test.records:
-            labels_test[identifier] = label
+        if dataset_name == 'restaurant':
+            features_path = 'data/restaurant/merged.csv'
+            labels_path = 'data/restaurant/labels.csv'
+            train_database_size = 600
+            number_train_pairs = 100
+            number_test_pairs = 15
+        elif dataset_name == 'abt-buy':
+            features_path = 'data/Abt-Buy/merged.csv'
+            labels_path = 'data/Abt-Buy/labels.csv'
+            train_database_size = 1500
+            number_train_pairs = 500
+            number_test_pairs = 200
         else:
-            raise Exception('Record identifier not in either database')
-    experiment = Experiment(database_train, database_test, labels_train, labels_test, thresholds,
-                            train_size=number_train_pairs, test_size=number_test_pairs)
-    print 'Saving results'
-    pickle.dump(experiment, open('experiment.p', 'wb'))
-    plot = experiment.ResultsPlot(experiment)
+            raise Exception('Invalid dataset name')
+
+        thresholds = np.linspace(0, 1, number_thresholds)
+        database = Database(annotation_path=features_path)
+        database_train = database.sample_and_remove(train_database_size)
+        database_test = database
+        labels = np.loadtxt(open(labels_path, 'rb'))
+        labels_train = dict()
+        labels_test = dict()
+        for identifier, label in enumerate(labels):
+            if identifier in database_train.records:
+                labels_train[identifier] = label
+            elif identifier in database_test.records:
+                labels_test[identifier] = label
+            else:
+                raise Exception('Record identifier ' + str(identifier) + ' not in either database')
+        experiment = Experiment(database_train, database_test, labels_train, labels_test, thresholds,
+                                train_size=number_train_pairs, test_size=number_test_pairs)
+        print 'Saving results'
+        pickle.dump(experiment, open('experiment.p', 'wb'))
+        plot = experiment.ResultsPlot(experiment)
     print 'Finished'
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 __author__ = 'mbarnes1'
 import numpy as np
 from itertools import izip
+from sklearn.metrics import auc
 
 
 class RocCurve(object):
@@ -12,6 +13,8 @@ class RocCurve(object):
         self.prob = prob[ind]
         self.tpr = np.cumsum(self.labels).astype('float')/np.sum(self.labels)
         self.fpr = np.cumsum(~self.labels).astype('float')/np.sum(~self.labels)
+        self.auc = auc(self.fpr, self.tpr)
+        print 'Area Under Curve:', self.auc
         print '     Threshold, FPR, TPR'
         for prob, fpr, tpr in izip(self.prob, self.fpr, self.tpr):
             print "{:10.4f}, {:10.4f}, {:10.4f}".format(prob, fpr, tpr)
@@ -21,50 +24,34 @@ class RocCurve(object):
         rates = np.column_stack((self.tpr, self.fpr))
         np.savetxt(path, rates, delimiter=",", header='tpr,fpr')
 
-    def make_plot(self, black_scheme=True):
+    def make_plot(self, title='P(strong | weak)'):
         import pylab as pl
-        if black_scheme:
-            from mpltools import style
-            style.use('dark_background')
-            tick_color = 'k'
-        else:
-            tick_color = 'w'
-        fig = pl.figure(figsize=(14, 6))
-        ax = fig.add_subplot(111)    # The big subplot
-        ax1 = fig.add_subplot(121)
-        ax2 = fig.add_subplot(122)
-        # Turn off axis lines and ticks of the big subplot
-
-        ax.spines['top'].set_color('none')
-        ax.spines['bottom'].set_color('none')
-        ax.spines['left'].set_color('none')
-        ax.spines['right'].set_color('none')
-        ax.tick_params(labelcolor=tick_color, top='off', bottom='off', left='off', right='off')
-
-        c1 = pl.rcParams['axes.color_cycle'][2]
-        c2 = pl.rcParams['axes.color_cycle'][1]
-
+        f, (ax1, ax2) = pl.subplots(1, 2, sharey=True, figsize=(14, 6), facecolor='white')
         tpr_l, tpr_u = wilson_confidence(self.tpr, np.sum(self.labels))
         fpr_l, fpr_u = wilson_confidence(self.fpr, np.sum(~self.labels))
+
+        c1 = pl.rcParams['axes.color_cycle'][2]
         ax1.plot(self.fpr, self.tpr, color=c1)
+        ax1.grid(True)
         ax1.fill_between(fpr_l, 0, tpr_u, color=c1, alpha=0.2)
-        ax1.fill_between(fpr_u, 0, tpr_l, color=tick_color)
-        ax1.plot([0, 1], [0, 1], 'w--')
-        #insertpt = np.searchsorted(self.prob, 0.5, sorter=range(len(self.prob)-1, -1, -1))
-        #ax1.plot(self.fpr[insertpt], self.tpr[insertpt], color=c1, marker='o')
+        ax1.fill_between(fpr_u, 0, tpr_l, color='w')
+        ax1.set_xlim([0, 1.0])
+        ax1.set_ylim([0, 1.0])
 
         ax2.fill_between(fpr_l, 0, tpr_u, color=c1, alpha=0.2)
-        ax2.fill_between(fpr_u, 0, tpr_l, color=tick_color)
-        p1, = ax2.semilogx(self.fpr, self.tpr, color=c1)
-        #p2, = ax2.semilogx(self.fpr[insertpt], self.tpr[insertpt], color=c1, marker='o')
-        #ax2.legend([p1, p2], ['Surrogate', '$P = 0.5$'], 'lower right')
+        ax2.fill_between(fpr_u, 0, tpr_l, color='w')
+        ax2.semilogx(self.fpr, self.tpr, color=c1)
+        ax2.set_xlim([0, 1.0])
+        ax2.grid(True)
 
-        # Set common labels
-        ax.set_xlabel('False Positive Rate')
-        ax.set_ylabel('True Positive Rate')
-        ax.set_title('P(strong | weak)', y=1.03, fontsize=18)
-        pl.savefig('roc.pdf', format='pdf')
+        ax1.set_xlabel('False Positive Rate')
+        ax1.set_ylabel('True Positive Rate')
+        ax2.set_xlabel('Log FPR')
+        ax2.set_ylabel('True Positive Rate')
+        pl.suptitle(title)
+
         pl.show()
+        #pl.savefig('roc.png', facecolor='white', edgecolor='none')
 
 
 def wilson_confidence(p, n):
