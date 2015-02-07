@@ -17,7 +17,7 @@ class MyTestCase(unittest.TestCase):
         self._blocking = BlockingScheme(self._database)
         self._er = EntityResolution()
         self._er._match_type = 'strong'
-        self._match_function = self._er.train(self._database, self._labels, 4, True)
+        self._match_function = self._er.train(self._database, self._labels, 4, class_balance=0.5)
 
     def test_run(self):
         self._er.run(self._database, self._match_function, 0.99, 'strong', cores=2)
@@ -77,7 +77,7 @@ class MyTestCase(unittest.TestCase):
         labels_train = fast_strong_cluster(database_train)
         labels_test = fast_strong_cluster(database_test)
         er = EntityResolution()
-        match_function = er.train(database_train, labels_train, 4, True)
+        match_function = er.train(database_train, labels_train, 4, class_balance=0.5)
         labels_pred = er.run(database_test, match_function, 0.99, 'strong', cores=2)
         number_fast_strong_records = len(labels_train) + len(labels_test)
         self.assertEqual(number_fast_strong_records, 1000)

@@ -47,7 +47,7 @@ class MyTestCase(unittest.TestCase):
             2: 1,
             3: 1
         }
-        self._surrogate.train(self._database, labels, 4, balancing=True)
+        self._surrogate.train(self._database, labels, 4, class_balance=0.5)
         self.assertTrue(self._surrogate.match(r0, r3, 'strong')[0])
         self.assertTrue(self._surrogate.match(r1, r3, 'strong')[0])
         self.assertFalse(self._surrogate.match(r0, r1, 'strong')[0])

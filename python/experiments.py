@@ -5,7 +5,7 @@ from entityresolution import EntityResolution
 from pairwise_features import generate_pair_seed
 from itertools import izip
 import numpy as np
-from metrics import Metrics
+from metrics import Metrics, _cluster
 import matplotlib.pyplot as plt
 plt.ion()
 from matplotlib.widgets import Slider
@@ -13,6 +13,11 @@ import cProfile
 import matplotlib.cm as cm
 from new_metrics import NewMetrics
 import cPickle as pickle
+
+# Color-blind safe color palette
+# Blue: #4477AA
+# Tan: #DDCC77
+# Magenta: #CC6677
 
 
 class SyntheticExperiment(object):
@@ -63,9 +68,9 @@ class SyntheticExperiment(object):
             match_precision = experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.precision  # threshold index should be arbitrary
             match_recall = experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.recall  # threshold index should be arbitrary
             match_f1 = experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.f1  # threshold index should be arbitrary
-            self.match_precision, = ax.plot(match_thresholds, match_precision, label='Precision', linewidth=2, color='g')
-            self.match_recall, = ax.plot(match_thresholds, match_recall, label='Recall', linewidth=2, color='b')
-            self.match_f1, = ax.plot(match_thresholds, match_f1, label='F1', linewidth=2, color='r')
+            self.match_precision, = ax.plot(match_thresholds, match_precision, label='Precision', linewidth=2, color='#4477AA')  # blue
+            self.match_recall, = ax.plot(match_thresholds, match_recall, label='Recall', linewidth=2, color='#CC6677')  # Magenta
+            self.match_f1, = ax.plot(match_thresholds, match_f1, label='F1', linewidth=2, color='#DDCC77')  # Tan
             plt.legend(loc='upper left')
             ax.set_xlabel('Threshold')
             ax.set_ylabel('Score')
@@ -77,7 +82,7 @@ class SyntheticExperiment(object):
             fig = plt.figure()
             self._figures.append(fig)
             ax = fig.add_subplot(111)
-            ax.grid(linestyle='--')
+            #ax.grid(linestyle='--')
             self._axes.append([ax])
             pairwise_f1 = list()
             pairwise_f1_lower_bound = list()
@@ -92,43 +97,43 @@ class SyntheticExperiment(object):
                 pairwise_precision_lower_bound.append(experiment.new_metrics[self._corruption_index][threshold_index].precision_lower_bound)
                 pairwise_recall_lower_bound.append(experiment.new_metrics[self._corruption_index][threshold_index].recall_lower_bound)
                 pairwise_f1_lower_bound.append(experiment.new_metrics[self._corruption_index][threshold_index].f1_lower_bound)
-            self.pf1, = ax.plot(experiment.thresholds, pairwise_f1, label='Pairwise F1', linewidth=2, color='r', linestyle='--')
-            self.pp, = ax.plot(experiment.thresholds, pairwise_precision, label='Pairwise Precision', linewidth=2, color='g', linestyle='--')
-            self.pr, = ax.plot(experiment.thresholds, pairwise_recall, label='Pairwise Recall', linewidth=2, color='b', linestyle='--')
-            self.pf1_dot, = ax.plot(experiment.thresholds[self._threshold_index], pairwise_f1[self._threshold_index],
-                                    'bo', markersize=10, label='Operating Point')
-            self.pf1_lower, = ax.plot(experiment.thresholds, pairwise_f1_lower_bound, label='Pairwise F1 Lower Bound', linewidth=2, color='r', alpha=0.5)
-            self.pp_lower, = ax.plot(experiment.thresholds, pairwise_precision_lower_bound, label='Pairwise Precision Lower Bound', linewidth=2, color='g', alpha=0.5)
-            self.pr_lower, = ax.plot(experiment.thresholds, pairwise_recall_lower_bound, label='Pairwise Recall Lower Bound', linewidth=2, color='b', alpha=0.5)
+            self.pf1, = ax.plot(experiment.thresholds, pairwise_f1, label='F1$', linewidth=2, color='#DDCC77', linestyle='--')
+            self.pp, = ax.plot(experiment.thresholds, pairwise_precision, label='Precision', linewidth=2, color='#4477AA', linestyle='--')
+            self.pr, = ax.plot(experiment.thresholds, pairwise_recall, label='Recall', linewidth=2, color='#CC6677', linestyle='--')
+            #self.pf1_dot, = ax.plot(experiment.thresholds[self._threshold_index], pairwise_f1[self._threshold_index],
+            #                        'bo', markersize=10, label='Operating Point')
+            self.pf1_lower, = ax.plot(experiment.thresholds, pairwise_f1_lower_bound, label='F1 Lower Bound', linewidth=2, color='#DDCC77')
+            self.pp_lower, = ax.plot(experiment.thresholds, pairwise_precision_lower_bound, label='Precision Lower Bound', linewidth=2, color='#4477AA')
+            self.pr_lower, = ax.plot(experiment.thresholds, pairwise_recall_lower_bound, label='Recall Lower Bound', linewidth=2, color='#CC6677')
             plt.legend(loc='upper left')
             self._axes[1][0].set_xlabel('Threshold')
             self._axes[1][0].set_ylabel('Pairwise Metric')
-            self._axes[1][0].set_title('Pairwise F1')
+            self._axes[1][0].set_title('Pairwise Metrics')
             self._axes[1][0].set_ylim([0, 1.0])
 
             # New metric
-            fig = plt.figure()
-            self._figures.append(fig)
-            ax = fig.add_subplot(111)
-            ax.grid(linestyle='--')
-            self._axes.append([ax])
-            new_metrics_expected = list()
-            new_metrics_best = list()
-            new_metrics_worst = list()
-            for threshold_index, threshold in enumerate(experiment.thresholds):
-                new_metrics_expected.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].net_expected_cost)
-                new_metrics_best.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].greedy_best_cost)
-                new_metrics_worst.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].greedy_worst_cost)
-            self.new_metrics_expected, = ax.plot(experiment.thresholds, new_metrics_expected, label='Expected')
-            self.new_metrics_best, = ax.plot(experiment.thresholds, new_metrics_best, label='Upper Greedy Bound')
-            self.new_metrics_worst, = ax.plot(experiment.thresholds, new_metrics_worst, label='Lower Greedy Bound')
-            plt.legend(handles=[self.new_metrics_expected, self.new_metrics_best, self.new_metrics_worst], loc='upper left')
-            # self.new_metrics_dot, = ax.plot(experiment.thresholds[self._threshold_index],
-            #                                 new_metrics_expected[self._threshold_index], 'bo', markersize=10,
-            #                                 label='Operating Point')
-            self._axes[2][0].set_xlabel('Threshold')
-            self._axes[2][0].set_ylabel('-New Metric')
-            self._axes[2][0].set_title('New Metric - Path Costs')
+            # fig = plt.figure()
+            # self._figures.append(fig)
+            # ax = fig.add_subplot(111)
+            # ax.grid(linestyle='--')
+            # self._axes.append([ax])
+            # new_metrics_expected = list()
+            # new_metrics_best = list()
+            # new_metrics_worst = list()
+            # for threshold_index, threshold in enumerate(experiment.thresholds):
+            #     new_metrics_expected.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].net_expected_cost)
+            #     new_metrics_best.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].greedy_best_cost)
+            #     new_metrics_worst.append(-1*experiment.new_metrics[self._corruption_index][threshold_index].greedy_worst_cost)
+            # self.new_metrics_expected, = ax.plot(experiment.thresholds, new_metrics_expected, label='Expected')
+            # self.new_metrics_best, = ax.plot(experiment.thresholds, new_metrics_best, label='Upper Greedy Bound')
+            # self.new_metrics_worst, = ax.plot(experiment.thresholds, new_metrics_worst, label='Lower Greedy Bound')
+            # plt.legend(handles=[self.new_metrics_expected, self.new_metrics_best, self.new_metrics_worst], loc='upper left')
+            # # self.new_metrics_dot, = ax.plot(experiment.thresholds[self._threshold_index],
+            # #                                 new_metrics_expected[self._threshold_index], 'bo', markersize=10,
+            # #                                 label='Operating Point')
+            # self._axes[2][0].set_xlabel('Threshold')
+            # self._axes[2][0].set_ylabel('-New Metric')
+            # self._axes[2][0].set_title('New Metric - Path Costs')
 
             # Plot the samples
             self._figures.append(plt.figure())
@@ -173,9 +178,9 @@ class SyntheticExperiment(object):
                                                                        color_seed=self._color_seed, ax=self._axes[-1][0])
                 self._experiment.synthetic_test[corruption_index].plot(predicted_labels, title='Predicted Clustering',
                                                                        color_seed=self._color_seed, ax=self._axes[-1][1])
-                new_metrics_expected = list()
-                new_metrics_best = list()
-                new_metrics_worst = list()
+                # new_metrics_expected = list()
+                # new_metrics_best = list()
+                # new_metrics_worst = list()
                 pairwise_f1 = list()
                 pairwise_f1_lower_bound = list()
                 pairwise_precision = list()
@@ -192,9 +197,9 @@ class SyntheticExperiment(object):
                     pairwise_precision_lower_bound.append(self._experiment.new_metrics[self._corruption_index][threshold_index].precision_lower_bound)
                     pairwise_recall_lower_bound.append(self._experiment.new_metrics[self._corruption_index][threshold_index].recall_lower_bound)
                     pairwise_f1_lower_bound.append(self._experiment.new_metrics[self._corruption_index][threshold_index].f1_lower_bound)
-                    new_metrics_expected.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].net_expected_cost)
-                    new_metrics_best.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].greedy_best_cost)
-                    new_metrics_worst.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].greedy_worst_cost)
+                    # new_metrics_expected.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].net_expected_cost)
+                    # new_metrics_best.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].greedy_best_cost)
+                    # new_metrics_worst.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].greedy_worst_cost)
                 self.match_precision.set_ydata(match_precision)
                 self.match_recall.set_ydata(match_recall)
                 self.match_f1.set_ydata(match_f1)
@@ -204,10 +209,10 @@ class SyntheticExperiment(object):
                 self.pp_lower.set_ydata(pairwise_precision_lower_bound)
                 self.pr.set_ydata(pairwise_recall)
                 self.pr_lower.set_ydata(pairwise_recall_lower_bound)
-                self.pf1_dot.set_ydata(pairwise_f1[self._threshold_index])
-                self.new_metrics_expected.set_ydata(new_metrics_expected)
-                self.new_metrics_best.set_ydata(new_metrics_best)
-                self.new_metrics_worst.set_ydata(new_metrics_worst)
+                #self.pf1_dot.set_ydata(pairwise_f1[self._threshold_index])
+                # self.new_metrics_expected.set_ydata(new_metrics_expected)
+                # self.new_metrics_best.set_ydata(new_metrics_best)
+                # self.new_metrics_worst.set_ydata(new_metrics_worst)
                 #self.new_metrics_dot.set_ydata(new_metrics[self._threshold_index])
                 for figure in self._figures:
                     figure.canvas.draw()
@@ -228,8 +233,8 @@ class SyntheticExperiment(object):
                                                                        color_seed=self._color_seed, ax=self._axes[-1][0])
                 self._experiment.synthetic_test[corruption_index].plot(predicted_labels, title='Predicted Clustering',
                                                                        color_seed=self._color_seed, ax=self._axes[-1][1])
-                self.pf1_dot.set_xdata(self._experiment.thresholds[threshold_index])
-                self.pf1_dot.set_ydata(self._experiment.metrics[corruption_index][threshold_index].pairwise_f1)
+                #self.pf1_dot.set_xdata(self._experiment.thresholds[threshold_index])
+                #self.pf1_dot.set_ydata(self._experiment.metrics[corruption_index][threshold_index].pairwise_f1)
                 #self.new_metrics_dot.set_xdata(self._experiment.thresholds[threshold_index])
                 #self.new_metrics_dot.set_ydata(self._experiment.new_metrics[corruption_index][threshold_index].
                 #                               net_expected_cost)
@@ -284,8 +289,9 @@ class SyntheticExperiment(object):
         for synthetic_train, synthetic_test in izip(self._synthetic_train, self.synthetic_test):
             er = EntityResolution()
             weak_match_function = er.train(synthetic_train.database, synthetic_train.labels, len(self._train_pair_seed),
-                                           balancing=True, pair_seed=self._train_pair_seed)
-            roc = weak_match_function.test(synthetic_test.database, synthetic_test.labels, 200, class_balance=9.0/99)
+                                           class_balance=0.5, pair_seed=self._train_pair_seed)
+            class_balance = get_pairwise_class_balance(synthetic_test.database, synthetic_test.labels)
+            roc = weak_match_function.test(synthetic_test.database, synthetic_test.labels, 200, class_balance=class_balance)
             #roc.make_plot()
             metrics_sublist = list()
             labels_sublist = list()
@@ -516,6 +522,29 @@ class Experiment(object):
             new_metrics_list.append(NewMetrics(self._database_test, er_deepcopy))
             labels_list.append(labels_pred)
         return labels_list, metrics_list, er_list, new_metrics_list
+
+
+def get_pairwise_class_balance(database, labels):
+    """
+    Returns the percent of positive pairs out of all the pairs in database.
+    Eventually this should be automated with density estimates, using a train database, train labels, and test database
+    :param database: A database object
+    :param labels: Corresponding labels for the database object. Dict of [record id, label]
+    :return class_balance: Percent of positive pairs in database, [0, 1.0]
+    """
+    print 'Calculating class balance'
+    number_records = len(database.records)
+    total_number_pairs = number_records*(number_records-1)/2
+    print '     Total number of pairs:', total_number_pairs
+    clusters = _cluster(labels)
+    total_number_positive_pairs = 0.0
+    for cluster in clusters:
+        number_cluster_pairs = len(cluster)*(len(cluster)-1)/2
+        total_number_positive_pairs += number_cluster_pairs
+    print '     Number of positive pairs:', total_number_positive_pairs
+    class_balance = total_number_positive_pairs/total_number_pairs
+    print '     Class balance:', class_balance
+    return class_balance
 
 
 def main():

@@ -57,7 +57,7 @@ class EntityResolution(object):
         self.decision_prob_list = []  # list of probabilities from attempted matches
         self.decision_strength_list = []  # list of decision strengths. 'weak', 'strong', 'weak_strong', or 'none'
 
-    def train(self, database_train, labels_train, train_size, balancing=True, pair_seed=None):
+    def train(self, database_train, labels_train, train_size, class_balance=0.5, pair_seed=None):
         """
         Trains the match function used in the entity resolution process
         :param database_train: Database object of samples used for training
@@ -67,7 +67,7 @@ class EntityResolution(object):
         :param pair_seed: List of record pairs to use
         :return match_function: Logistic Regression object
         """
-        self._match_function.train(database_train, labels_train, train_size, balancing, pair_seed=pair_seed)
+        self._match_function.train(database_train, labels_train, train_size, class_balance=class_balance, pair_seed=pair_seed)
         return self._match_function
 
     def run(self, database_test, match_function, decision_threshold, match_type, max_block_size=np.Inf,

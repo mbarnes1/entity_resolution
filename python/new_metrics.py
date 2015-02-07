@@ -16,9 +16,9 @@ class NewMetrics(object):
         print 'Evaluating new metric...'
         self.database = database
         self.er = entity_resolution
-        self.net_expected_cost = self.get_net_expected_cost()
-        self.greedy_best_cost = self.get_net_greedy_cost('best')
-        self.greedy_worst_cost = self.get_net_greedy_cost('worst')
+        # self.net_expected_cost = self.get_net_expected_cost()
+        # self.greedy_best_cost = self.get_net_greedy_cost('best')
+        # self.greedy_worst_cost = self.get_net_greedy_cost('worst')
         self.recall_lower_bound = self._pairwise_recall_lower_bound()
         self.precision_lower_bound, self.TP_FP_match, self.TP_FP_swoosh = self._pairwise_precision_lower_bound()
         self.f1_lower_bound = 2*self.precision_lower_bound*self.recall_lower_bound/(self.precision_lower_bound + self.recall_lower_bound)

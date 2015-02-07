@@ -106,7 +106,6 @@ class SyntheticDatabase(object):
         print 'x1:', x1
         print 'x2:', x2
         print 'Colors:', color_list
-
         ax.axis([-0.2, 1.2, -0.2, 1.2])
 
 

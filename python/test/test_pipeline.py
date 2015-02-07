@@ -31,6 +31,6 @@ class MyTestCase(unittest.TestCase):
         labels_train = fast_strong_cluster(database_train)
         labels_test = fast_strong_cluster(database_test)
         er = EntityResolution()
-        match_function = er.train(database_train, labels_train, 100, True)
+        match_function = er.train(database_train, labels_train, 100, class_balance=0.5)
         labels_pred = er.run(database_test, match_function, 0.99, match_type='strong', cores=2)
         self.assertEqual(_cluster(labels_pred), _cluster(labels_test))
