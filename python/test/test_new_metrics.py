@@ -17,7 +17,6 @@ class MyTestCase(unittest.TestCase):
         cls._new_metric = NewMetrics(experiment.synthetic_test[cls.corruption_index].database,
                                      experiment.er[cls.corruption_index][cls.threshold_index])
 
-
     def test_get_records(self):
         """
         Tests whether _get_records returns the correct records for a random corruption and threshold
@@ -83,6 +82,10 @@ class MyTestCase(unittest.TestCase):
         min_greedy_cost = self._new_metric.get_net_greedy_cost('best')
         max_greedy_cost = self._new_metric.get_net_greedy_cost('worst')
 
+    def test_pairwise_bounds(self):
+        """
+        Tests pairwise recall and precision lower bounds
+        """
 
 
 

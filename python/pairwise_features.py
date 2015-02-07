@@ -25,18 +25,18 @@ class SurrogateMatchFunction(object):
         self.logreg = linear_model.LogisticRegression(solver='lbfgs')
         self.decision_threshold = decision_threshold
 
-    def train(self, database_train, labels_train, number_samples, balancing=True, pair_seed=None):
+    def train(self, database_train, labels_train, number_samples, class_balance=0.5, pair_seed=None):
         """
         Get training samples and trains the surrogate match function
         :param database_train: Training database
         :param labels_train: Dictionary of [identier, cluster label]
         :param number_samples: Number of samples to use in training
-        :param balancing: Boolean, whether to balance match/mismatch classes
+        :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
         :param pair_seed: List of pairs to use. Otherwise random
         :return pairs: Set of pairs. Each pair is a list with two entries, the two ad identifiers
         """
         x1_train, x2_train, self.x2_mean = get_pairwise_features(database_train, labels_train, number_samples,
-                                                                 balancing, pair_seed=pair_seed)
+                                                                 class_balance, pair_seed=pair_seed)
         bounds = list()
         for _ in range(x2_train.shape[1]):
             bounds.append((None, 0))  # restrict all feature weights to be negative (convex set)
@@ -52,20 +52,21 @@ class SurrogateMatchFunction(object):
         print 'Model coefficients: ', self.logreg.coef_
         print 'Intercept: ', self.logreg.intercept_
 
-    def test(self, database_test, labels_test, test_size=1000):
+    def test(self, database_test, labels_test, test_size=1000, class_balance=0.5):
         """
         Get testing samples and test the surrogate match function. Evaluated with ROC curve
         :param database_test: RecordDatabase object
         :param test_size: Number of pairwise samples to use in testing
+        :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
         :return RocCurve: An RocCurve object
         """
-        pair_seed = generate_pair_seed(database_test, labels_test, test_size, True)
+        pair_seed = generate_pair_seed(database_test, labels_test, test_size, class_balance)
         x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, test_size, True, pair_seed=pair_seed)
         x1_bar_probability = self.logreg.predict_proba(x2_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))
         #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
         roc = RocCurve(x1_test, x1_bar_probability)
-
+        self.roc = roc
         sorted_indices = np.argsort(-1*x1_bar_probability)
         for sorted_index in sorted_indices:
             x1_bar = x1_bar_probability[sorted_index]
@@ -116,13 +117,13 @@ class SurrogateMatchFunction(object):
             return False, p_x1, strength
 
 
-def generate_pair_seed(database, labels, number_samples, balance_seed):
+def generate_pair_seed(database, labels, number_samples, class_balance=0.5):
     """
     Generates list of pairs to seed from. Useful for removing random process noise for tests on related datasets
     :param database: Database object
     :param labels: Cluster labels of database. Dictionary [identifier, cluster label]
     :param number_samples: Number of samples in pair seed
-    :param balance_seed: Boolean, whether to balance match/mismatch classes
+    :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
     :return pair_seed: List of pairs, where each pair is a vector of form (identifierA, identifierB)
     """
     if len(database.records)*(len(database.records)-1)/2 < number_samples:
@@ -149,14 +150,14 @@ def generate_pair_seed(database, labels, number_samples, balance_seed):
     cluster_prob = np.array(cluster_prob)
     within_cluster_pairs = 0
     between_cluster_pairs = 0
-    to_balance_indices = np.random.choice(range(0, number_samples), int(number_samples/2), replace=False)  # indices of seed to balance
+    to_balance_indices = np.random.choice(range(0, number_samples), int(number_samples*class_balance), replace=False)  # indices of seed to balance
     samples_to_balance = np.zeros(number_samples)
     samples_to_balance[to_balance_indices] = 1
-    if number_remaining_pairs < sum(samples_to_balance) and balance_seed:
+    if number_remaining_pairs < sum(samples_to_balance) and class_balance:
         raise Exception('Not enough within cluster pairs to properly balance classes. Requested {0:.0f}, but only '
                         '{1:.0f} available'.format(len(samples_to_balance), number_remaining_pairs))
     for balance_this_sample in samples_to_balance:
-        if balance_this_sample and balance_seed:
+        if balance_this_sample:
             print '     Trying to sample pair from within cluster...',
             cluster_index = np.random.choice(range(0, len(cluster_keys)), p=cluster_prob)
             cluster = cluster_keys[cluster_index]
@@ -206,14 +207,14 @@ def generate_pair_seed(database, labels, number_samples, balance_seed):
     return pairs
 
 
-def get_pairwise_features(database, labels_train, number_samples, balancing, pair_seed=None):
+def get_pairwise_features(database, labels_train, number_samples, class_balance, pair_seed=None):
     """
     Randomly samples pairs of records, without replacement.
     Can balance classes, using labels_train
     :param database: Database object to sample from
     :param labels_train: Cluster labels of the dictionary form [identifier, cluster label]
     :param number_samples: Number of samples to return
-    :param balancing: Boolean, whether to balance match/mismatch classes
+    :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
     :param pair_seed: (Optional) pairs to use. Otherwise generates randomly
     :return x1: Vector of strong features, values takes either 0 or 1
     :return x2: n x m Matrix of weak features, where n is number_samples and m is number of weak features
@@ -222,7 +223,7 @@ def get_pairwise_features(database, labels_train, number_samples, balancing, pai
     if pair_seed is None:  # randomly draw new pairs
         if len(database.records)*(len(database.records)-1)/2 < number_samples:
             raise Exception('Number of requested pairs exceeds number of pairs available in database')
-        pairs = generate_pair_seed(database, labels_train, number_samples, balancing)
+        pairs = generate_pair_seed(database, labels_train, number_samples, class_balance)
     else:  # use pair seed
         if number_samples > len(pair_seed):
             raise Exception('Number requested samples larger than seed')

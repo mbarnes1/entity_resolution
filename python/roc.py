@@ -2,18 +2,48 @@ __author__ = 'mbarnes1'
 import numpy as np
 from itertools import izip
 from sklearn.metrics import auc
+from copy import copy
 
 
 class RocCurve(object):
     def __init__(self, labels, prob):
+        """
+        :param labels: List of the true labels
+        :param prob: List of the corresponding probabilities
+        :return:
+        """
         print 'Calculating TPR & FPR...'
         ind = np.argsort(-prob)  # sort in descending order
         labels = labels.astype('bool')
         self.labels = labels[ind]
         self.prob = prob[ind]
+
         self.tpr = np.cumsum(self.labels).astype('float')/np.sum(self.labels)
+        self.recall = copy(self.tpr)  # TPR = recall, by definition
         self.fpr = np.cumsum(~self.labels).astype('float')/np.sum(~self.labels)
+        self.precision = np.cumsum(self.labels).astype('float')/np.arange(1, len(self.labels)+1)
+        self.f1 = 2*self.precision*self.recall/(self.precision + self.recall)
+
+        # Reverse all the arrays and lists to prob is in ascending order
+        self.labels = self.labels[::-1]
+        self.prob = self.prob[::-1]
+        self.tpr = self.prob[::-1]
+        self.recall = self.recall[::-1]
+
+        self.fpr = self.fpr[::-1]
+        self.precision = self.precision[::-1]
+        self.f1 = self.f1[::-1]
+
+        # Pad with a value at prob=0.0
+        self.prob = np.append(self.prob, 1.0)
+        self.recall = np.append(self.recall, 0.0)
+        self.precision = np.append(self.precision, 1.0)
+        self.f1 = np.append(self.f1, 0.0)
+
         self.auc = auc(self.fpr, self.tpr)
+        print '     Label, Threshold, Precision, Recall'
+        for label, prob, prec, recall in izip(self.labels, self.prob, self.precision, self.recall):
+            print "{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}".format(label, prob, prec, recall)
         print 'Area Under Curve:', self.auc
         print '     Threshold, FPR, TPR'
         for prob, fpr, tpr in izip(self.prob, self.fpr, self.tpr):

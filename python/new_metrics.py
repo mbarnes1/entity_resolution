@@ -1,6 +1,7 @@
 from itertools import izip, combinations
 from copy import deepcopy
 import cPickle as pickle
+from bisect import bisect, bisect_left
 from numpy import Inf
 __author__ = 'mbarnes1'
 
@@ -18,7 +19,61 @@ class NewMetrics(object):
         self.net_expected_cost = self.get_net_expected_cost()
         self.greedy_best_cost = self.get_net_greedy_cost('best')
         self.greedy_worst_cost = self.get_net_greedy_cost('worst')
+        self.recall_lower_bound = self._pairwise_recall_lower_bound()
+        self.precision_lower_bound, self.TP_FP_match, self.TP_FP_swoosh = self._pairwise_precision_lower_bound()
+        self.f1_lower_bound = 2*self.precision_lower_bound*self.recall_lower_bound/(self.precision_lower_bound + self.recall_lower_bound)
         print 'new metric evaluated.'
+
+    def _pairwise_recall_lower_bound(self):
+        """
+        Lower bounds the pairwise recall
+        :return recall_lower_bound:
+        """
+        threshold = self.er._match_function.decision_threshold
+        print 'Lower bounding pairwise recall at threshold', threshold
+        index = bisect_left(self.er._match_function.roc.prob, threshold)  # first occurence of this threshold
+        recall_lower_bound = self.er._match_function.roc.recall[index]
+        return recall_lower_bound
+
+    def _pairwise_precision_lower_bound(self):
+        """
+        Lower bounds the pairwise precision
+        :return precision_lower_bound:
+        """
+        threshold = self.er._match_function.decision_threshold
+        print 'Lower bounding pairwise precision at threshold', threshold
+        print '     ROC prob:'
+        print self.er._match_function.roc.prob
+        index = bisect(self.er._match_function.roc.prob, threshold) - 1  # first occurence of this threshold
+        if index >= 0:
+            match_precision = self.er._match_function.roc.precision[index]
+        elif index == -1:
+            match_precision = self.er._match_function.roc.precision[0]
+        else:
+            raise IndexError
+        print '     Prec_{match} =', match_precision
+        total_swoosh_pairs = 0  # number of predicted intercluster pairs
+        total_match_pairs = 0  # number of predicted intercluster pairs that directly match
+        for cluster in self.er.entities:
+            print '     Analyzing cluster:'
+            cluster.display(indent='        ')
+            cluster_swoosh_pairs = len(cluster.line_indices)*(len(cluster.line_indices)-1)/2
+            print '     Cluster swoosh pairs:', cluster_swoosh_pairs
+            pairs = combinations(cluster.line_indices, 2)
+            cluster_match_pairs = 0
+            for pair in pairs:
+                r1 = self.database.records[pair[0]]
+                r2 = self.database.records[pair[1]]
+                match, _, _ = self.er._match_function.match(r1, r2, 'weak')
+                cluster_match_pairs += match
+            print '     Cluster match pairs:', cluster_match_pairs
+            total_swoosh_pairs += cluster_swoosh_pairs
+            total_match_pairs += cluster_match_pairs
+        precision_lower_bound = match_precision*total_match_pairs/total_swoosh_pairs if total_swoosh_pairs else 1.0
+        print '     Total match pairs:', total_match_pairs
+        print '     Total swoosh pairs:', total_swoosh_pairs
+        print '     Precision lower bound:', precision_lower_bound
+        return precision_lower_bound, total_match_pairs, total_swoosh_pairs
 
     def _get_records(self, entity_index):
         """

@@ -36,26 +36,80 @@ class SyntheticExperiment(object):
             self._figures = list()
             self._axes = list()
 
+            # ER Precision/Recall Lower Bound Debugging
+            fig = plt.figure()
+            self._figures.append(fig)
+            ax = fig.add_subplot(111)
+            #self._axes.append(ax)
+            TP_FP_match = list()  # TP_match + FP_match
+            TP_FP_swoosh = list()  # TP_swoosh + FP_swoosh
+            for threshold_index, threshold in enumerate(experiment.thresholds):
+                TP_FP_match.append(experiment.new_metrics[self._corruption_index][threshold_index].TP_FP_match)
+                TP_FP_swoosh.append(experiment.new_metrics[self._corruption_index][threshold_index].TP_FP_swoosh)
+            self.TP_FP_match, = ax.plot(experiment.thresholds, TP_FP_match, label='TP + FP, match', linewidth=2, color='g')
+            self.TP_FP_swoosh, = ax.plot(experiment.thresholds, TP_FP_swoosh, label='TP + FP, swoosh', linewidth=2, color='r', linestyle='--')
+            plt.legend(loc='upper left')
+            ax.set_xlabel('Threshold')
+            ax.set_ylabel('Count')
+            ax.set_title('Lower Bound Debugging')
+
+
+            # Match function precision recall curve
+            fig = plt.figure()
+            self._figures.append(fig)
+            ax = fig.add_subplot(111)
+            self._axes.append(ax)
+            match_thresholds = experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.prob
+            match_precision = experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.precision  # threshold index should be arbitrary
+            match_recall = experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.recall  # threshold index should be arbitrary
+            match_f1 = experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.f1  # threshold index should be arbitrary
+            self.match_precision, = ax.plot(match_thresholds, match_precision, label='Precision', linewidth=2, color='g')
+            self.match_recall, = ax.plot(match_thresholds, match_recall, label='Recall', linewidth=2, color='b')
+            self.match_f1, = ax.plot(match_thresholds, match_f1, label='F1', linewidth=2, color='r')
+            plt.legend(loc='upper left')
+            ax.set_xlabel('Threshold')
+            ax.set_ylabel('Score')
+            ax.set_title('Match Function Performance')
+            ax.set_xlim([0, 1.0])
+            ax.set_ylim([0, 1.0])
+
             # Pairwise F1
-            self._figures.append(plt.figure())
-            ax = self._figures[0].add_subplot(111)
+            fig = plt.figure()
+            self._figures.append(fig)
+            ax = fig.add_subplot(111)
             ax.grid(linestyle='--')
             self._axes.append([ax])
             pairwise_f1 = list()
+            pairwise_f1_lower_bound = list()
+            pairwise_precision = list()
+            pairwise_precision_lower_bound = list()
+            pairwise_recall = list()
+            pairwise_recall_lower_bound = list()
             for threshold_index, threshold in enumerate(experiment.thresholds):
                 pairwise_f1.append(experiment.metrics[self._corruption_index][threshold_index].pairwise_f1)
-            self.pf1, = ax.plot(experiment.thresholds, pairwise_f1)
+                pairwise_precision.append(experiment.metrics[self._corruption_index][threshold_index].pairwise_precision)
+                pairwise_recall.append(experiment.metrics[self._corruption_index][threshold_index].pairwise_recall)
+                pairwise_precision_lower_bound.append(experiment.new_metrics[self._corruption_index][threshold_index].precision_lower_bound)
+                pairwise_recall_lower_bound.append(experiment.new_metrics[self._corruption_index][threshold_index].recall_lower_bound)
+                pairwise_f1_lower_bound.append(experiment.new_metrics[self._corruption_index][threshold_index].f1_lower_bound)
+            self.pf1, = ax.plot(experiment.thresholds, pairwise_f1, label='Pairwise F1', linewidth=2, color='r', linestyle='--')
+            self.pp, = ax.plot(experiment.thresholds, pairwise_precision, label='Pairwise Precision', linewidth=2, color='g', linestyle='--')
+            self.pr, = ax.plot(experiment.thresholds, pairwise_recall, label='Pairwise Recall', linewidth=2, color='b', linestyle='--')
             self.pf1_dot, = ax.plot(experiment.thresholds[self._threshold_index], pairwise_f1[self._threshold_index],
-                                     'bo', markersize=10, label='Operating Point')
+                                    'bo', markersize=10, label='Operating Point')
+            self.pf1_lower, = ax.plot(experiment.thresholds, pairwise_f1_lower_bound, label='Pairwise F1 Lower Bound', linewidth=2, color='r', alpha=0.5)
+            self.pp_lower, = ax.plot(experiment.thresholds, pairwise_precision_lower_bound, label='Pairwise Precision Lower Bound', linewidth=2, color='g', alpha=0.5)
+            self.pr_lower, = ax.plot(experiment.thresholds, pairwise_recall_lower_bound, label='Pairwise Recall Lower Bound', linewidth=2, color='b', alpha=0.5)
             plt.legend(loc='upper left')
-            self._axes[0][0].set_xlabel('Threshold')
-            self._axes[0][0].set_ylabel('Pairwise F1')
-            self._axes[0][0].set_title('Pairwise F1')
-            self._axes[0][0].set_ylim([0, 1.0])
+            self._axes[1][0].set_xlabel('Threshold')
+            self._axes[1][0].set_ylabel('Pairwise Metric')
+            self._axes[1][0].set_title('Pairwise F1')
+            self._axes[1][0].set_ylim([0, 1.0])
 
             # New metric
-            self._figures.append(plt.figure())
-            ax = self._figures[1].add_subplot(111)
+            fig = plt.figure()
+            self._figures.append(fig)
+            ax = fig.add_subplot(111)
             ax.grid(linestyle='--')
             self._axes.append([ax])
             new_metrics_expected = list()
@@ -72,9 +126,9 @@ class SyntheticExperiment(object):
             # self.new_metrics_dot, = ax.plot(experiment.thresholds[self._threshold_index],
             #                                 new_metrics_expected[self._threshold_index], 'bo', markersize=10,
             #                                 label='Operating Point')
-            self._axes[1][0].set_xlabel('Threshold')
-            self._axes[1][0].set_ylabel('-New Metric')
-            self._axes[1][0].set_title('New Metric - Path Costs')
+            self._axes[2][0].set_xlabel('Threshold')
+            self._axes[2][0].set_ylabel('-New Metric')
+            self._axes[2][0].set_title('New Metric - Path Costs')
 
             # Plot the samples
             self._figures.append(plt.figure())
@@ -123,19 +177,40 @@ class SyntheticExperiment(object):
                 new_metrics_best = list()
                 new_metrics_worst = list()
                 pairwise_f1 = list()
+                pairwise_f1_lower_bound = list()
+                pairwise_precision = list()
+                pairwise_precision_lower_bound = list()
+                pairwise_recall = list()
+                pairwise_recall_lower_bound = list()
+                match_precision = self._experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.precision
+                match_recall = self._experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.recall
+                match_f1 = self._experiment.er[self._corruption_index][self._threshold_index]._match_function.roc.f1
                 for threshold_index, threshold in enumerate(self._experiment.thresholds):
-                    pairwise_f1.append(self._experiment.metrics[corruption_index][threshold_index].pairwise_f1)
+                    pairwise_f1.append(self._experiment.metrics[self._corruption_index][threshold_index].pairwise_f1)
+                    pairwise_precision.append(self._experiment.metrics[self._corruption_index][threshold_index].pairwise_precision)
+                    pairwise_recall.append(self._experiment.metrics[self._corruption_index][threshold_index].pairwise_recall)
+                    pairwise_precision_lower_bound.append(self._experiment.new_metrics[self._corruption_index][threshold_index].precision_lower_bound)
+                    pairwise_recall_lower_bound.append(self._experiment.new_metrics[self._corruption_index][threshold_index].recall_lower_bound)
+                    pairwise_f1_lower_bound.append(self._experiment.new_metrics[self._corruption_index][threshold_index].f1_lower_bound)
                     new_metrics_expected.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].net_expected_cost)
                     new_metrics_best.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].greedy_best_cost)
                     new_metrics_worst.append(-1*self._experiment.new_metrics[self._corruption_index][threshold_index].greedy_worst_cost)
+                self.match_precision.set_ydata(match_precision)
+                self.match_recall.set_ydata(match_recall)
+                self.match_f1.set_ydata(match_f1)
                 self.pf1.set_ydata(pairwise_f1)
+                self.pf1_lower.set_ydata(pairwise_f1_lower_bound)
+                self.pp.set_ydata(pairwise_precision)
+                self.pp_lower.set_ydata(pairwise_precision_lower_bound)
+                self.pr.set_ydata(pairwise_recall)
+                self.pr_lower.set_ydata(pairwise_recall_lower_bound)
                 self.pf1_dot.set_ydata(pairwise_f1[self._threshold_index])
                 self.new_metrics_expected.set_ydata(new_metrics_expected)
                 self.new_metrics_best.set_ydata(new_metrics_best)
                 self.new_metrics_worst.set_ydata(new_metrics_worst)
                 #self.new_metrics_dot.set_ydata(new_metrics[self._threshold_index])
-                self._figures[0].canvas.draw()
-                self._figures[1].canvas.draw()
+                for figure in self._figures:
+                    figure.canvas.draw()
                 self._corruption_index = corruption_index
 
         def update2(self, _):
@@ -158,8 +233,8 @@ class SyntheticExperiment(object):
                 #self.new_metrics_dot.set_xdata(self._experiment.thresholds[threshold_index])
                 #self.new_metrics_dot.set_ydata(self._experiment.new_metrics[corruption_index][threshold_index].
                 #                               net_expected_cost)
-                self._figures[0].canvas.draw()
-                self._figures[1].canvas.draw()
+                for figure in self._figures:
+                    figure.canvas.draw()
                 self._threshold_index = threshold_index
 
     def __init__(self, number_entities, records_per_entity, number_thresholds):
@@ -171,7 +246,7 @@ class SyntheticExperiment(object):
         self._uncorrupted_synthetic_train = uncorrupted_synthetic.sample_and_remove(float(number_entities) *
                                                                                     records_per_entity/2)
         self._train_pair_seed = generate_pair_seed(self._uncorrupted_synthetic_train.database,
-                                                   self._uncorrupted_synthetic_train.labels, 150, balance_seed=True)
+                                                   self._uncorrupted_synthetic_train.labels, 150, class_balance=0.5)
         self.uncorrupted_synthetic_test = uncorrupted_synthetic
         self._synthetic_train = list()
         self.synthetic_test = list()
@@ -210,8 +285,8 @@ class SyntheticExperiment(object):
             er = EntityResolution()
             weak_match_function = er.train(synthetic_train.database, synthetic_train.labels, len(self._train_pair_seed),
                                            balancing=True, pair_seed=self._train_pair_seed)
-            roc = weak_match_function.test(synthetic_test.database, synthetic_test.labels, 200)
-            roc.make_plot()
+            roc = weak_match_function.test(synthetic_test.database, synthetic_test.labels, 200, class_balance=9.0/99)
+            #roc.make_plot()
             metrics_sublist = list()
             labels_sublist = list()
             er_sublist = list()
@@ -405,7 +480,7 @@ class Experiment(object):
         else:
             print 'Generating pairwise seed for training database'
             self._train_pair_seed = generate_pair_seed(self._database_train, self._labels_train, train_size,
-                                                       balance_seed=True)
+                                                       class_balance=0.5)
         self._predicted_labels, self.metrics, self._er, self.new_metrics = self.run()
 
     def run(self):
@@ -445,7 +520,7 @@ class Experiment(object):
 
 def main():
     #### Real Experiment ####
-    number_thresholds = 25
+    number_thresholds = 15
     dataset_name = 'synthetic'  # synthetic, restaurant, abt-buy
 
     if dataset_name == 'synthetic':
