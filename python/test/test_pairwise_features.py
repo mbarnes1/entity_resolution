@@ -19,14 +19,14 @@ class MyTestCase(unittest.TestCase):
     def test_pairs(self):
         database = Database('test_annotations_10000_cleaned.csv')
         labels = fast_strong_cluster(database)
-        pair_seed = generate_pair_seed(database, labels, 10000, True)
+        pair_seed = generate_pair_seed(database, labels, 0.5)
         # x1_a, x2_a, m_a = _get_pairs(database, labels, 10, balancing=True)
         # x1_b, x2_b, m_b = _get_pairs(database, labels, 10, balancing=True)
         # self.assertNotEqual(x1_a, x1_b)
         # self.assertNotEqual(x2_a, x2_b)
         # self.assertNotEqual(m_a, m_b)
-        x1_a, x2_a, m_a = get_pairwise_features(database, labels, 10, class_balance=True, pair_seed=pair_seed)
-        x1_b, x2_b, m_b = get_pairwise_features(database, labels, 10, class_balance=True, pair_seed=pair_seed)
+        x1_a, x2_a, m_a = get_pairwise_features(database, labels, pair_seed)
+        x1_b, x2_b, m_b = get_pairwise_features(database, labels, pair_seed)
         np.testing.assert_array_equal(x1_a, x1_b)
         np.testing.assert_array_equal(x2_a, x2_b)
         np.testing.assert_array_equal(m_a, m_b)
@@ -47,7 +47,8 @@ class MyTestCase(unittest.TestCase):
             2: 1,
             3: 1
         }
-        self._surrogate.train(self._database, labels, 4, class_balance=0.5)
+        pair_seed = generate_pair_seed(self._database, labels, 0.5)
+        self._surrogate.train(self._database, labels, pair_seed)
         self.assertTrue(self._surrogate.match(r0, r3, 'strong')[0])
         self.assertTrue(self._surrogate.match(r1, r3, 'strong')[0])
         self.assertFalse(self._surrogate.match(r0, r1, 'strong')[0])
@@ -66,8 +67,9 @@ class MyTestCase(unittest.TestCase):
         labels_train = fast_strong_cluster(database_train)
         labels_test = fast_strong_cluster(database_test)
         surrogate = SurrogateMatchFunction(0.99)
-        surrogate.train(database_train, labels_train, 500)
-        roc = surrogate.test(database_test, labels_test, 500)
+        pair_seed = generate_pair_seed(database_train, labels_train, 0.5)
+        surrogate.train(database_train, labels_train, pair_seed)
+        roc = surrogate.test(database_test, labels_test, 0.5)
         roc.make_plot()
 
     def test_get_x1(self):

@@ -4,6 +4,7 @@ from entityresolution import EntityResolution
 from database import Database
 from blocking import BlockingScheme
 from metrics import _cluster
+from pairwise_features import generate_pair_seed
 __author__ = 'mbarnes1'
 
 
@@ -31,6 +32,7 @@ class MyTestCase(unittest.TestCase):
         labels_train = fast_strong_cluster(database_train)
         labels_test = fast_strong_cluster(database_test)
         er = EntityResolution()
-        match_function = er.train(database_train, labels_train, 100, class_balance=0.5)
+        pair_seed = generate_pair_seed(database_train, labels_train, 0.5)
+        match_function = er.train(database_train, labels_train, pair_seed)
         labels_pred = er.run(database_test, match_function, 0.99, match_type='strong', cores=2)
         self.assertEqual(_cluster(labels_pred), _cluster(labels_test))

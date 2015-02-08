@@ -25,18 +25,15 @@ class SurrogateMatchFunction(object):
         self.logreg = linear_model.LogisticRegression(solver='lbfgs')
         self.decision_threshold = decision_threshold
 
-    def train(self, database_train, labels_train, number_samples, class_balance=0.5, pair_seed=None):
+    def train(self, database_train, labels_train, pair_seed):
         """
         Get training samples and trains the surrogate match function
         :param database_train: Training database
         :param labels_train: Dictionary of [identier, cluster label]
-        :param number_samples: Number of samples to use in training
-        :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
-        :param pair_seed: List of pairs to use. Otherwise random
+        :param pair_seed: List of pairs to use
         :return pairs: Set of pairs. Each pair is a list with two entries, the two ad identifiers
         """
-        x1_train, x2_train, self.x2_mean = get_pairwise_features(database_train, labels_train, number_samples,
-                                                                 class_balance, pair_seed=pair_seed)
+        x1_train, x2_train, self.x2_mean = get_pairwise_features(database_train, labels_train, pair_seed)
         bounds = list()
         for _ in range(x2_train.shape[1]):
             bounds.append((None, 0))  # restrict all feature weights to be negative (convex set)
@@ -52,7 +49,7 @@ class SurrogateMatchFunction(object):
         print 'Model coefficients: ', self.logreg.coef_
         print 'Intercept: ', self.logreg.intercept_
 
-    def test(self, database_test, labels_test, test_size=1000, class_balance=0.5):
+    def test(self, database_test, labels_test, class_balance):
         """
         Get testing samples and test the surrogate match function. Evaluated with ROC curve
         :param database_test: RecordDatabase object
@@ -60,8 +57,9 @@ class SurrogateMatchFunction(object):
         :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
         :return RocCurve: An RocCurve object
         """
-        pair_seed = generate_pair_seed(database_test, labels_test, test_size, class_balance)
-        x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, test_size, True, pair_seed=pair_seed)
+        self.class_balance_validation = class_balance
+        pair_seed = generate_pair_seed(database_test, labels_test, class_balance)
+        x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, pair_seed)
         x1_bar_probability = self.logreg.predict_proba(x2_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))
         #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
@@ -117,18 +115,15 @@ class SurrogateMatchFunction(object):
             return False, p_x1, strength
 
 
-def generate_pair_seed(database, labels, number_samples, class_balance=0.5):
+def generate_pair_seed(database, labels, class_balance):
     """
     Generates list of pairs to seed from. Useful for removing random process noise for tests on related datasets
     :param database: Database object
     :param labels: Cluster labels of database. Dictionary [identifier, cluster label]
-    :param number_samples: Number of samples in pair seed
     :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
     :return pair_seed: List of pairs, where each pair is a vector of form (identifierA, identifierB)
     """
-    if len(database.records)*(len(database.records)-1)/2 < number_samples:
-        raise Exception('Number of requested pairs exceeds number of pairs available in database')
-    print 'Generating pairwise seed of length', number_samples
+    print 'Generating pairwise seed with class balance', class_balance
     pairs = set()
     cluster_to_records = dict()
     line_indices = database.records.keys()
@@ -145,17 +140,38 @@ def generate_pair_seed(database, labels, number_samples, class_balance=0.5):
         records = cluster_to_records[key]
         cluster_pairs = float(len(records))*(len(records)-1)/2
         cluster_pair_sizes.append(cluster_pairs)
-    number_remaining_pairs = sum(cluster_pair_sizes)
-    cluster_prob = [size/number_remaining_pairs for size in cluster_pair_sizes]
+    total_number_pairs = len(database.records)*(len(database.records)-1)/2
+    number_remaining_pos_pairs = sum(cluster_pair_sizes)
+    total_number_neg_pairs = total_number_pairs - number_remaining_pos_pairs
+    print '     Number of available intracluster (pos) pairs:', number_remaining_pos_pairs
+    print '     Number of available intercluster (neg) pairs:', total_number_neg_pairs
+    print '     Actual class balance,', float(number_remaining_pos_pairs)/total_number_pairs
+    if class_balance is None:  # use the full database (or at least up to a limit), balanced as is
+        print '     No class balancing. Using actual class balance.'
+        class_balance = float(number_remaining_pos_pairs)/total_number_pairs
+    if float(number_remaining_pos_pairs)/total_number_pairs < class_balance:  # limited by pos class (most common)
+        number_requested_pos_class = number_remaining_pos_pairs  # no more than 10000
+        number_requested_neg_class = number_requested_pos_class*(1-class_balance)/class_balance
+    else:
+        number_requested_neg_class = total_number_neg_pairs  # no more than 10000
+        number_requested_pos_class = class_balance*number_requested_neg_class/(1-class_balance)
+    if min(number_requested_neg_class, number_requested_pos_class) > 1000:
+        number_requested_neg_class /= min(number_requested_neg_class, number_requested_pos_class)/1000
+        number_requested_pos_class /= min(number_requested_neg_class, number_requested_pos_class)/1000
+    number_requested_pos_class = int(number_requested_pos_class)
+    number_requested_neg_class = int(number_requested_neg_class)
+    print '     Number of requested intracluster (pos) pairs:', number_requested_pos_class
+    print '     Number of requested intercluster (neg) pairs:', number_requested_neg_class
+
+    cluster_prob = [size/number_remaining_pos_pairs for size in cluster_pair_sizes]
     cluster_prob = np.array(cluster_prob)
     within_cluster_pairs = 0
     between_cluster_pairs = 0
-    to_balance_indices = np.random.choice(range(0, number_samples), int(number_samples*class_balance), replace=False)  # indices of seed to balance
-    samples_to_balance = np.zeros(number_samples)
+    print '     Choosing indices to balance.'
+    number_requested_samples = number_requested_neg_class+number_requested_pos_class
+    to_balance_indices = np.random.choice(range(0, number_requested_samples), number_requested_pos_class, replace=False)  # indices of seed to balance
+    samples_to_balance = np.zeros(number_requested_samples)
     samples_to_balance[to_balance_indices] = 1
-    if number_remaining_pairs < sum(samples_to_balance) and class_balance:
-        raise Exception('Not enough within cluster pairs to properly balance classes. Requested {0:.0f}, but only '
-                        '{1:.0f} available'.format(len(samples_to_balance), number_remaining_pairs))
     for balance_this_sample in samples_to_balance:
         if balance_this_sample:
             print '     Trying to sample pair from within cluster...',
@@ -172,11 +188,11 @@ def generate_pair_seed(database, labels, number_samples, class_balance=0.5):
                     pairs.add(pair)
                     within_cluster_pairs += 1
                     print '         Updating this cluster probability from', cluster_prob[cluster_index],
-                    cluster_prob[cluster_index] -= 1.0/number_remaining_pairs
+                    cluster_prob[cluster_index] -= 1.0/number_remaining_pos_pairs
                     if abs(cluster_prob[cluster_index]) < 0.0000001:  # if within E-7 of zero
                         cluster_prob[cluster_index] = 0
                     print 'to', cluster_prob[cluster_index]
-                    number_remaining_pairs -= 1
+                    number_remaining_pos_pairs -= 1
                     normalizer = sum(cluster_prob)
                     cluster_prob = cluster_prob/normalizer
                 else:
@@ -202,32 +218,24 @@ def generate_pair_seed(database, labels, number_samples, class_balance=0.5):
         print '         Number of pairs within:', within_cluster_pairs, '   between:', between_cluster_pairs
     pairs = list(pairs)
     print 'Finished generating pair seed.'
-    print '     Total number of within cluster pairs: ', within_cluster_pairs
-    print '     Total number of between cluster pairs: ', between_cluster_pairs
+    print '     Total number of within cluster (pos) pairs: ', within_cluster_pairs
+    print '     Total number of between cluster (neg) pairs: ', between_cluster_pairs
     return pairs
 
 
-def get_pairwise_features(database, labels_train, number_samples, class_balance, pair_seed=None):
+def get_pairwise_features(database, labels_train, pair_seed):
     """
     Randomly samples pairs of records, without replacement.
     Can balance classes, using labels_train
     :param database: Database object to sample from
     :param labels_train: Cluster labels of the dictionary form [identifier, cluster label]
     :param number_samples: Number of samples to return
-    :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
-    :param pair_seed: (Optional) pairs to use. Otherwise generates randomly
+    :param pair_seed: Pairs to use.
     :return x1: Vector of strong features, values takes either 0 or 1
     :return x2: n x m Matrix of weak features, where n is number_samples and m is number of weak features
     :return m: Mean imputation vector of weak features, 1 x number of weak features
     """
-    if pair_seed is None:  # randomly draw new pairs
-        if len(database.records)*(len(database.records)-1)/2 < number_samples:
-            raise Exception('Number of requested pairs exceeds number of pairs available in database')
-        pairs = generate_pair_seed(database, labels_train, number_samples, class_balance)
-    else:  # use pair seed
-        if number_samples > len(pair_seed):
-            raise Exception('Number requested samples larger than seed')
-        pairs = pair_seed[:number_samples]
+    pairs = pair_seed  # use all of the pair seed
     x1 = list()
     x2 = list()
     for pair in pairs:

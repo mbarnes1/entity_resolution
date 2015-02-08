@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from experiments import SyntheticExperiment
+from experiments import SyntheticExperiment, get_pairwise_class_balance
 from new_metrics import NewMetrics, _min_dict, _max_dict
 __author__ = 'mbarnes1'
 
@@ -11,11 +11,12 @@ class MyTestCase(unittest.TestCase):
         """
         Expensive setup items, only done once
         """
-        experiment = SyntheticExperiment(2, 50, 3)
+        experiment = SyntheticExperiment(2, 50, 30, 30, 0.5, 3)
         cls.corruption_index = np.random.randint(0, len(experiment.corruption_multipliers))
         cls.threshold_index = np.random.randint(0, len(experiment.thresholds))
+        class_balance_test = get_pairwise_class_balance(experiment.synthetic_test[cls.corruption_index].labels)
         cls._new_metric = NewMetrics(experiment.synthetic_test[cls.corruption_index].database,
-                                     experiment.er[cls.corruption_index][cls.threshold_index])
+                                     experiment.er[cls.corruption_index][cls.threshold_index], class_balance_test)
 
     def test_get_records(self):
         """

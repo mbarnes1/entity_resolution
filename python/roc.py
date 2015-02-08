@@ -17,6 +17,8 @@ class RocCurve(object):
         labels = labels.astype('bool')
         self.labels = labels[ind]
         self.prob = prob[ind]
+        self.class_balance = float(sum(self.labels))/len(labels)
+        print '     Class balance of', self.class_balance
 
         self.tpr = np.cumsum(self.labels).astype('float')/np.sum(self.labels)
         self.recall = copy(self.tpr)  # TPR = recall, by definition

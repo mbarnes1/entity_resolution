@@ -7,14 +7,16 @@ __author__ = 'mbarnes1'
 
 
 class NewMetrics(object):
-    def __init__(self, database, entity_resolution):
+    def __init__(self, database, entity_resolution, class_balance_test):
         """
         Un/semi-supervised entity resolution metrics
         :param database: Reference to Database object
         :param entity_resolution: Reference to EntityResolution object
+        :param class_balance_test: The predicted class balance in database
         """
         print 'Evaluating new metric...'
         self.database = database
+        self.class_balance_test = class_balance_test
         self.er = entity_resolution
         # self.net_expected_cost = self.get_net_expected_cost()
         # self.greedy_best_cost = self.get_net_greedy_cost('best')
@@ -32,6 +34,7 @@ class NewMetrics(object):
         threshold = self.er._match_function.decision_threshold
         print 'Lower bounding pairwise recall at threshold', threshold
         index = bisect_left(self.er._match_function.roc.prob, threshold)  # first occurence of this threshold
+        print 'Validation set match recall', self.er._match_function.roc.recall[index]
         recall_lower_bound = self.er._match_function.roc.recall[index]
         return recall_lower_bound
 
@@ -46,12 +49,17 @@ class NewMetrics(object):
         print self.er._match_function.roc.prob
         index = bisect(self.er._match_function.roc.prob, threshold) - 1  # first occurence of this threshold
         if index >= 0:
-            match_precision = self.er._match_function.roc.precision[index]
+            match_precision_validation = self.er._match_function.roc.precision[index]
         elif index == -1:
-            match_precision = self.er._match_function.roc.precision[0]
+            match_precision_validation = self.er._match_function.roc.precision[0]
         else:
             raise IndexError
-        print '     Prec_{match} =', match_precision
+        print '     Validation set match precision =', match_precision_validation
+        class_balance_validation = self.er._match_function.roc.class_balance
+        print '     Rebalancing precision for validation class balance', class_balance_validation
+        print '     and test set class balance', self.class_balance_test
+        match_precision_test = rebalance_precision(match_precision_validation, class_balance_validation, self.class_balance_test)
+        print '     Expected test set match precision', match_precision_test
         total_swoosh_pairs = 0  # number of predicted intercluster pairs
         total_match_pairs = 0  # number of predicted intercluster pairs that directly match
         for cluster in self.er.entities:
@@ -69,7 +77,7 @@ class NewMetrics(object):
             print '     Cluster match pairs:', cluster_match_pairs
             total_swoosh_pairs += cluster_swoosh_pairs
             total_match_pairs += cluster_match_pairs
-        precision_lower_bound = match_precision*total_match_pairs/total_swoosh_pairs if total_swoosh_pairs else 1.0
+        precision_lower_bound = match_precision_test*total_match_pairs/total_swoosh_pairs if total_swoosh_pairs else 1.0
         print '     Total match pairs:', total_match_pairs
         print '     Total swoosh pairs:', total_swoosh_pairs
         print '     Precision lower bound:', precision_lower_bound
@@ -198,6 +206,30 @@ class NewMetrics(object):
                     cost_dict[pair] = _cost_function(prob)
             records[indices] = record1
         return net_cost
+
+
+def rebalance_recall(recall_1, class_balance_1, class_balance_2):
+    """
+    The expected precision and recall in dataset 2, given the precision and recall in dataset 1, and both class balances
+    :param recall_1:
+    :param class_balance_1: Float [0, 1.0]. P/(P+N)
+    :param class_balance_2: Float [0, 1.0]. P/(P+N)
+    :return recall_1:
+    """
+    recall_2 = recall_2  # unaffected by class balance
+    return recall_2
+
+
+def rebalance_precision(precision_1, class_balance_1, class_balance_2):
+    """
+    The expected precision and recall in dataset 2, given the precision and recall in dataset 1, and both class balances
+    :param precision_1:
+    :param class_balance_1: Float [0, 1.0]. P/(P+N)
+    :param class_balance_2: Float [0, 1.0]. P/(P+N)
+    :return precision_2:
+    """
+    precision_2 = class_balance_2*precision_1/(class_balance_2*precision_1 + class_balance_1*(1-precision_1))
+    return precision_2
 
 
 def _min_dict(dictionary, remove=frozenset()):

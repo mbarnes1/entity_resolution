@@ -3,6 +3,7 @@ import sys
 print sys.path
 from entityresolution import EntityResolution, merge_duped_records
 from database import Database
+from pairwise_features import generate_pair_seed
 from blocking import BlockingScheme
 from pipeline import fast_strong_cluster
 __author__ = 'mbarnes1'
@@ -17,7 +18,8 @@ class MyTestCase(unittest.TestCase):
         self._blocking = BlockingScheme(self._database)
         self._er = EntityResolution()
         self._er._match_type = 'strong'
-        self._match_function = self._er.train(self._database, self._labels, 4, class_balance=0.5)
+        pair_seed = generate_pair_seed(self._database, self._labels, 0.5)
+        self._match_function = self._er.train(self._database, self._labels, pair_seed)
 
     def test_run(self):
         self._er.run(self._database, self._match_function, 0.99, 'strong', cores=2)
@@ -77,7 +79,8 @@ class MyTestCase(unittest.TestCase):
         labels_train = fast_strong_cluster(database_train)
         labels_test = fast_strong_cluster(database_test)
         er = EntityResolution()
-        match_function = er.train(database_train, labels_train, 4, class_balance=0.5)
+        pair_seed = generate_pair_seed(database_train, labels_train, 0.5)
+        match_function = er.train(database_train, labels_train, pair_seed)
         labels_pred = er.run(database_test, match_function, 0.99, 'strong', cores=2)
         number_fast_strong_records = len(labels_train) + len(labels_test)
         self.assertEqual(number_fast_strong_records, 1000)

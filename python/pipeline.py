@@ -18,7 +18,7 @@ def main():
     er = EntityResolution()
     labels_train = fast_strong_cluster(db_training)
     labels_test = fast_strong_cluster(db_testing)
-    weak_match_function = er.train(db_training, labels_train, train_size, balancing)
+    weak_match_function = er.train(db_training, labels_train, balancing)
     labels_pred = er.run(db_testing, weak_match_function, decision_threshold, match_type, max_block_size)
     metrics = Metrics(labels_test, labels_pred)
     _print_metrics(metrics)
