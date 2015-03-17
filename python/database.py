@@ -11,14 +11,13 @@ class SyntheticDatabase(object):
     """
     Create and corrupt synthetic databases
     """
-    def __init__(self, number_entities, records_per_entity, number_features=2, sigma=0):
+    def __init__(self, number_entities, records_per_entity, number_features=2):
         """
         Initials synthetic database with 10 features, uniformaly distributed from [0, 1]
         No initial corruption, so records from the same cluster have exact same features
         :param number_entities:
         :param records_per_entity: Mean number of records per entity
         :param number_features:
-        :param sigma: Standard deviation of records_per_entity
         """
         indices = range(0, number_features)
         names = ['Name_{0}'.format(s) for s in indices]
@@ -34,12 +33,36 @@ class SyntheticDatabase(object):
         for entity_index in range(0, number_entities):
             features = np.random.rand(feature_descriptor.number)
             features = features.astype(str)
-            if sigma:
-                number_records = int(round(np.random.normal(records_per_entity, sigma)))  # number of records for this entity
-            else:
-                number_records = records_per_entity
+            number_records = records_per_entity
             for _ in range(number_records):
                 r = Record(record_index, feature_descriptor)
+                r.initialize_from_annotation(features)
+                self.database.records[record_index] = r
+                self.labels[record_index] = entity_index
+                record_index += 1
+
+    def add(self, number_entities, records_per_entity):
+        """
+        Adds additional entities to the database
+        :param number_entities:
+        :param records_per_entity:
+        """
+        if len(self.labels) != len(self.database.records):
+            raise Exception('Number of records and labels do not match')
+        current_max_record_id = 0
+        current_max_entity_id = 0
+        for (record_id, _), (__, entity_id) in izip(self.database.records.iteritems(), self.labels.iteritems()):
+            if record_id > current_max_record_id:
+                current_max_record_id = record_id
+            if entity_id > current_max_entity_id:
+                current_max_entity_id = entity_id
+        record_index = current_max_record_id+1
+        for entity_index in range(current_max_entity_id+1, current_max_entity_id+1+number_entities):
+            features = np.random.rand(self.database.feature_descriptor.number)
+            features = features.astype(str)
+            number_records = records_per_entity
+            for _ in range(number_records):
+                r = Record(record_index, self.database.feature_descriptor)
                 r.initialize_from_annotation(features)
                 self.database.records[record_index] = r
                 self.labels[record_index] = entity_index

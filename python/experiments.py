@@ -8,16 +8,18 @@ import numpy as np
 from metrics import Metrics, _cluster
 import matplotlib.pyplot as plt
 plt.ion()
+from matplotlib.patches import Rectangle
 from matplotlib.widgets import Slider
 import cProfile
 import matplotlib.cm as cm
 from new_metrics import NewMetrics
 import cPickle as pickle
-
+import csv
+import datetime
 # Color-blind safe color palette
-# Blue: #4477AA
-# Tan: #DDCC77
-# Magenta: #CC6677
+# Blue (Precision): #4477AA
+# Magenta (Recall): #CC6677
+# Tan (F1): #DDCC77
 
 
 class SyntheticExperiment(object):
@@ -245,10 +247,10 @@ class SyntheticExperiment(object):
     def __init__(self, number_entities, records_per_entity, train_database_size, validation_database_size,
                  train_class_balance, number_thresholds):
         ## Parameters ##
-        self.corruption_multipliers = np.linspace(0, 0.025, 5)
+        self.corruption_multipliers = np.array([0.025])  # np.linspace(0, 0.025, 5)
         self.thresholds = np.linspace(0, 1, number_thresholds)
         ################
-        uncorrupted_synthetic = SyntheticDatabase(number_entities, records_per_entity, number_features=2, sigma=0)
+        uncorrupted_synthetic = SyntheticDatabase(number_entities, records_per_entity, number_features=2)
         self._uncorrupted_synthetic_train = uncorrupted_synthetic.sample_and_remove(train_database_size)
         self._uncorrupted_synthetic_validation = uncorrupted_synthetic.sample_and_remove(validation_database_size)
         self.uncorrupted_synthetic_test = uncorrupted_synthetic
@@ -377,151 +379,6 @@ class Experiment(object):
     """
     An experiment on a single synthetic or real database, with varying cutoff thresholds
     """
-    class ResultsPlot(object):
-        """
-        Plot of the metrics at varying thresholds
-        """
-        def __init__(self, experiment):
-            """
-            :param experiment: Experiment parent object
-            """
-            print 'Plotting experimental results...'
-            self._experiment = experiment
-
-            self._threshold_index = 0
-
-            # Plot the metrics
-            self._figures = list()
-            self._axes = list()
-
-            ##############
-            # ER Precision/Recall Lower Bound Debugging
-            fig = plt.figure()
-            self._figures.append(fig)
-            ax = fig.add_subplot(111)
-            #self._axes.append(ax)
-            TP_FP_match = list()  # TP_match + FP_match
-            TP_FP_swoosh = list()  # TP_swoosh + FP_swoosh
-            for threshold_index, threshold in enumerate(experiment.thresholds):
-                TP_FP_match.append(experiment.new_metrics[threshold_index].TP_FP_match)
-                TP_FP_swoosh.append(experiment.new_metrics[threshold_index].TP_FP_swoosh)
-            self.TP_FP_match, = ax.plot(experiment.thresholds, TP_FP_match, label='TP + FP, match', linewidth=2, color='g')
-            self.TP_FP_swoosh, = ax.plot(experiment.thresholds, TP_FP_swoosh, label='TP + FP, swoosh', linewidth=2, color='r', linestyle='--')
-            plt.legend(loc='upper left')
-            ax.set_xlabel('Threshold')
-            ax.set_ylabel('Count')
-            ax.set_title('Lower Bound Debugging')
-
-
-            # Match function precision recall curve
-            fig = plt.figure()
-            self._figures.append(fig)
-            ax = fig.add_subplot(111)
-            self._axes.append(ax)
-            match_thresholds = experiment.er[self._threshold_index]._match_function.roc.prob
-            match_precision = experiment.er[self._threshold_index]._match_function.roc.precision  # threshold index should be arbitrary
-            match_recall = experiment.er[self._threshold_index]._match_function.roc.recall  # threshold index should be arbitrary
-            match_f1 = experiment.er[self._threshold_index]._match_function.roc.f1  # threshold index should be arbitrary
-            self.match_precision, = ax.plot(match_thresholds, match_precision, label='Precision', linewidth=2, color='#4477AA')  # blue
-            self.match_recall, = ax.plot(match_thresholds, match_recall, label='Recall', linewidth=2, color='#CC6677')  # Magenta
-            self.match_f1, = ax.plot(match_thresholds, match_f1, label='F1', linewidth=2, color='#DDCC77')  # Tan
-            plt.legend(loc='upper left')
-            ax.set_xlabel('Threshold')
-            ax.set_ylabel('Score')
-            ax.set_title('Match Function Performance')
-            ax.set_xlim([0, 1.0])
-            ax.set_ylim([0, 1.0])
-
-            # Pairwise F1
-            fig = plt.figure()
-            self._figures.append(fig)
-            ax = fig.add_subplot(111)
-            #ax.grid(linestyle='--')
-            self._axes.append([ax])
-            pairwise_f1 = list()
-            pairwise_f1_lower_bound = list()
-            pairwise_precision = list()
-            pairwise_precision_lower_bound = list()
-            pairwise_recall = list()
-            pairwise_recall_lower_bound = list()
-            for threshold_index, threshold in enumerate(experiment.thresholds):
-                pairwise_f1.append(experiment.metrics[threshold_index].pairwise_f1)
-                pairwise_precision.append(experiment.metrics[threshold_index].pairwise_precision)
-                pairwise_recall.append(experiment.metrics[threshold_index].pairwise_recall)
-                pairwise_precision_lower_bound.append(experiment.new_metrics[threshold_index].precision_lower_bound)
-                pairwise_recall_lower_bound.append(experiment.new_metrics[threshold_index].recall_lower_bound)
-                pairwise_f1_lower_bound.append(experiment.new_metrics[threshold_index].f1_lower_bound)
-            self.pf1, = ax.plot(experiment.thresholds, pairwise_f1, label='F1', linewidth=2, color='#DDCC77', linestyle='--')
-            self.pp, = ax.plot(experiment.thresholds, pairwise_precision, label='Precision', linewidth=2, color='#4477AA', linestyle='--')
-            self.pr, = ax.plot(experiment.thresholds, pairwise_recall, label='Recall', linewidth=2, color='#CC6677', linestyle='--')
-            #self.pf1_dot, = ax.plot(experiment.thresholds[self._threshold_index], pairwise_f1[self._threshold_index],
-            #                        'bo', markersize=10, label='Operating Point')
-            self.pf1_lower, = ax.plot(experiment.thresholds, pairwise_f1_lower_bound, label='F1 Lower Bound', linewidth=2, color='#DDCC77')
-            self.pp_lower, = ax.plot(experiment.thresholds, pairwise_precision_lower_bound, label='Precision Lower Bound', linewidth=2, color='#4477AA')
-            self.pr_lower, = ax.plot(experiment.thresholds, pairwise_recall_lower_bound, label='Recall Lower Bound', linewidth=2, color='#CC6677')
-            plt.legend(loc='upper left')
-            self._axes[1][0].set_xlabel('Threshold')
-            self._axes[1][0].set_ylabel('Pairwise Metric')
-            self._axes[1][0].set_title('Pairwise Metrics')
-            self._axes[1][0].set_ylim([0, 1.0])
-            #################
-
-            # Pairwise
-            # self._figures.append(plt.figure())
-            # ax = self._figures[0].add_subplot(111)
-            # ax.grid(linestyle='--')
-            # self._axes.append([ax])
-            # pairwise_f1 = list()
-            # pairwise_precision = list()
-            # pairwise_recall = list()
-            # for threshold_index, threshold in enumerate(experiment.thresholds):
-            #     pairwise_f1.append(experiment.metrics[threshold_index].pairwise_f1)
-            #     pairwise_precision.append(experiment.metrics[threshold_index].pairwise_precision)
-            #     pairwise_recall.append(experiment.metrics[threshold_index].pairwise_recall)
-            # ax.plot(experiment.thresholds, pairwise_f1, label='Pairwise F1')
-            # ax.plot(experiment.thresholds, pairwise_precision, label='Pairwise Precision')
-            # ax.plot(experiment.thresholds, pairwise_recall, label='Pairwise Recall')
-            # plt.legend(loc='upper left')
-            # self._axes[0][0].set_xlabel('Threshold')
-            # self._axes[0][0].set_ylabel('Score')
-            # self._axes[0][0].set_title('Pairwise Metrics')
-            # self._axes[0][0].set_ylim([0, 1.0])
-            #
-            # # Number of entities
-            # self._figures.append(plt.figure())
-            # ax = self._figures[2].add_subplot(111)
-            # ax.grid(linestyle='--')
-            # self._axes.append([ax])
-            # number_entities = list()
-            # for threshold_index, threshold in enumerate(experiment.thresholds):
-            #     number_entities.append(experiment.metrics[threshold_index].number_entities)
-            # ax.plot(experiment.thresholds, number_entities)
-            # self._axes[2][0].set_xlabel('Threshold')
-            # self._axes[2][0].set_ylabel('Number of Entities')
-            # self._axes[2][0].set_title('Number of Resolved Entities')
-            #
-            # # Closest cluster metrics
-            # self._figures.append(plt.figure())
-            # ax = self._figures[3].add_subplot(111)
-            # ax.grid(linestyle='--')
-            # self._axes.append([ax])
-            # closest_cluster_f1 = list()
-            # closest_cluster_precision = list()
-            # closest_cluster_recall = list()
-            # for threshold_index, threshold in enumerate(experiment.thresholds):
-            #     closest_cluster_f1.append(experiment.metrics[threshold_index].closest_cluster_f1)
-            #     closest_cluster_precision.append(experiment.metrics[threshold_index].closest_cluster_precision)
-            #     closest_cluster_recall.append(experiment.metrics[threshold_index].closest_cluster_recall)
-            # ax.plot(experiment.thresholds, closest_cluster_f1, label='Closest Cluster F1')
-            # ax.plot(experiment.thresholds, closest_cluster_precision, label='Closest Cluster Precision')
-            # ax.plot(experiment.thresholds, closest_cluster_recall, label='Closest Cluster Recall')
-            # plt.legend(loc='upper left')
-            # self._axes[3][0].set_xlabel('Threshold')
-            # self._axes[3][0].set_ylabel('Score')
-            # self._axes[3][0].set_title('Closest Cluster Metrics')
-            # self._axes[3][0].set_ylim([0, 1.0])
-            plt.show()
-
     def __init__(self, database_train, database_validation, database_test, labels_train, labels_validation, labels_test,
                  train_class_balance, thresholds):
         """
@@ -545,7 +402,7 @@ class Experiment(object):
         self.thresholds = thresholds
         print 'Generating pairwise seed for training database'
         self._train_pair_seed = generate_pair_seed(self._database_train, self._labels_train, train_class_balance)
-        self._predicted_labels, self.metrics, self.er, self.new_metrics = self.run()
+        self._predicted_labels, self.metrics, self.new_metrics = self.run()
 
     def run(self):
         """
@@ -566,19 +423,221 @@ class Experiment(object):
         #ROC.make_plot()
         metrics_list = list()
         labels_list = list()
-        er_list = list()
         new_metrics_list = list()
         class_balance_test = get_pairwise_class_balance(self._labels_test)
         for threshold in self.thresholds:
             print 'Running entity resolution at threshold =', threshold
             labels_pred = er.run(self._database_test, weak_match_function, threshold, single_block=True,
                                  match_type='weak', max_block_size=np.Inf, cores=1)
-            er_deepcopy = deepcopy(er)
-            er_list.append(er_deepcopy)
             metrics_list.append(Metrics(self._labels_test, labels_pred))
-            new_metrics_list.append(NewMetrics(self._database_test, er_deepcopy, class_balance_test))
+            new_metrics_list.append(NewMetrics(self._database_test, deepcopy(er), class_balance_test))
             labels_list.append(labels_pred)
-        return labels_list, metrics_list, er_list, new_metrics_list
+        return labels_list, metrics_list, new_metrics_list
+
+    def plot(self):
+        """
+        Plot of the metrics at varying thresholds
+        """
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")
+
+        pairwise_f1 = list()
+        pairwise_f1_lower_bound = list()
+        pairwise_precision = list()
+        pairwise_precision_lower_bound = list()
+        pairwise_recall = list()
+        pairwise_recall_lower_bound = list()
+        pairwise_precision_lower_bound_lower_ci = list()
+        pairwise_precision_lower_bound_upper_ci = list()
+        pairwise_recall_lower_bound_lower_ci = list()
+        pairwise_recall_lower_bound_upper_ci = list()
+        matches = list()  # TP_match + FP_match
+        pairs_r = list()  # TP_swoosh + FP_swoosh
+        for threshold_index, threshold in enumerate(self.thresholds):
+            pairwise_f1.append(self.metrics[threshold_index].pairwise_f1)
+            pairwise_precision.append(self.metrics[threshold_index].pairwise_precision)
+            pairwise_recall.append(self.metrics[threshold_index].pairwise_recall)
+            pairwise_precision_lower_bound.append(self.new_metrics[threshold_index].precision_lower_bound)
+            pairwise_precision_lower_bound_lower_ci.append(self.new_metrics[threshold_index].precision_lower_bound_lower_ci)
+            pairwise_precision_lower_bound_upper_ci.append(self.new_metrics[threshold_index].precision_lower_bound_upper_ci)
+            pairwise_recall_lower_bound.append(self.new_metrics[threshold_index].recall_lower_bound)
+            pairwise_recall_lower_bound_lower_ci.append(self.new_metrics[threshold_index].recall_lower_bound_lower_ci)
+            pairwise_recall_lower_bound_upper_ci.append(self.new_metrics[threshold_index].recall_lower_bound_upper_ci)
+            pairwise_f1_lower_bound.append(self.new_metrics[threshold_index].f1_lower_bound)
+            matches.append(self.new_metrics[threshold_index].TP_FP_match)
+            pairs_r.append(self.new_metrics[threshold_index].TP_FP_swoosh)
+        ## Save results to text files
+        filename = '../figures/'+timestamp+'_data.csv'
+        with open(filename, 'wb') as f:
+            f.write('Threshold, Pairwise precision, Pairwise Precision Lower Bound, Lower CI, Upper CI,'
+                    ' Pairwise Recall, Pairwise Recall Lower Bound, Lower CI, Upper CI, '
+                    'Pairwise F1, Pairwise F1 lower bound, |M|, |Pairs(R)|\n')
+            writer = csv.writer(f)
+            rows = zip(self.thresholds, pairwise_precision, pairwise_precision_lower_bound,
+                       pairwise_precision_lower_bound_lower_ci, pairwise_precision_lower_bound_upper_ci,
+                       pairwise_recall, pairwise_recall_lower_bound, pairwise_recall_lower_bound_lower_ci,
+                       pairwise_recall_lower_bound_upper_ci, pairwise_f1, pairwise_f1_lower_bound, matches, pairs_r)
+            for row in rows:
+                writer.writerow(row)
+        f.close()
+
+        ## Plot the results
+        save_as = '../figures/'+timestamp
+        plot_results(filename, save_as)
+
+
+def plot_size_experiment(filename, save_as=None):
+    """
+    Plots degradation in performance as database size increases
+    :param filename: Path to file
+    :param save_as: Save file name (optional)
+    """
+    figsize = (5, 5.0*3/4)
+    label_font_size = 10
+    legend_font_size = 10
+    title_font_size = 12
+
+    print 'Loading csv results file...'
+    data = np.loadtxt(open(filename, 'rb'), delimiter=',', skiprows=1)
+    sizes = data[:, 0]
+    precision_small = data[:, 1]
+    recall_small = data[:, 2]
+    f1_small = data[:, 3]
+    precision_large = data[:, 4]
+    precision_large_bound = data[:, 5]
+    precision_large_bound_lower_ci = data[:, 6]
+    precision_large_bound_upper_ci = data[:, 7]
+    recall_large = data[:, 8]
+    recall_large_bound = data[:, 9]
+    recall_large_bound_lower_ci = data[:, 10]
+    recall_large_bound_upper_ci = data[:, 11]
+
+    ## Precision
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111)
+    ci_legend_proxy = Rectangle((0.000001, 0.000001), 1.0, 1., fc="#BFBFBF")
+    ax.fill_between(sizes, precision_large_bound_lower_ci, precision_large_bound_upper_ci, color='#BFBFBF', linewidth=0.0)
+    p1, = ax.plot(sizes, precision_small, label='Original', linewidth=2, color='k', linestyle='--')
+    p1.set_dashes([10, 6])
+    p2, = ax.plot(sizes, precision_large, label='Optimized, true', linewidth=2, color='k')
+    p2.set_dashes([2, 4])
+    p3, = ax.plot(sizes, precision_large_bound, label='Optimized Lower Bound', linewidth=2, color='k')
+    ax.set_ylim([0, 1.05])
+    plt.yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    plt.xticks([100, 300, 500, 700, 900])
+    lg = plt.legend([p1, p3, ci_legend_proxy, p2], ['Original', 'Optimized Lower Bound', 'Bound 95% CI', 'Optimized, true'], loc='lower right', fontsize=legend_font_size, handlelength=3)
+    ax.set_xlabel('Database Size', fontsize=label_font_size)
+    ax.set_ylabel('Precision', fontsize=label_font_size)
+    ax.set_title('Precision Degradation', fontsize=title_font_size)
+    plt.tight_layout()
+    if save_as is not None:
+        output = save_as + '_precision.eps'
+        fig.savefig(output, bbox_inches='tight')
+
+    ## Recall
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111)
+    ci_legend_proxy = Rectangle((0.000001, 0.000001), 1.0, 1., fc="#BFBFBF")
+    ax.fill_between(sizes, recall_large_bound_lower_ci, recall_large_bound_upper_ci, color='#BFBFBF', linewidth=0.0)
+    p1, = ax.plot(sizes, recall_small, label='Original', linewidth=2, color='k', linestyle='--')
+    p2, = ax.plot(sizes, recall_large, label='Optimized, true', linewidth=2, color='k', linestyle=':')
+    p3, = ax.plot(sizes, recall_large_bound, label='Optimized Lower Bound', linewidth=2, color='k')
+    ax.set_ylim([0, 1.05])
+    plt.yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    plt.xticks([100, 300, 500, 700, 900])
+    plt.legend([p1, p3, ci_legend_proxy, p2], ['Original', 'Optimized Lower Bound', 'Bound 95% CI', 'Optimized, true'], loc='lower right', fontsize=legend_font_size)
+    ax.set_xlabel('Database Size', fontsize=label_font_size)
+    ax.set_ylabel('Recall', fontsize=label_font_size)
+    ax.set_title('Recall Degradation', fontsize=title_font_size)
+    plt.tight_layout()
+    if save_as is not None:
+        output = save_as + '_recall.eps'
+        fig.savefig(output, bbox_inches='tight')
+
+    plt.show()
+
+
+def plot_results(filename, save_as=None):
+    """
+    Plots results saved in filename
+    :param filename: Path to file
+    :param save_as: String. Save figures if not None
+    """
+    figsize = (5, 5.0*3/4)
+    label_font_size = 10
+    legend_font_size = 10
+    title_font_size = 12
+
+    print 'Loading csv results file...'
+    data = np.loadtxt(open(filename, 'rb'), delimiter=',', skiprows=1)
+    thresholds = data[:, 0]
+    precision = data[:, 1]
+    precision_bound = data[:, 2]
+    precision_bound_lower_ci = data[:, 3]
+    precision_bound_upper_ci = data[:, 4]
+    recall = data[:, 5]
+    recall_bound = data[:, 6]
+    recall_bound_lower_ci = data[:, 7]
+    recall_bound_upper_ci = data[:, 8]
+    f1 = data[:, 9]
+    f1_bound = data[:, 10]
+    n_matches = data[:, 11]
+    pairs_r = data[:, 12]
+
+    print 'Plotting experimental results...'
+    # Lemma 1
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111)
+    ax.plot(thresholds, n_matches, label='M', linewidth=2, color='k')
+    ax.plot(thresholds, pairs_r, label='Pairs(R)', linewidth=2, color='k', linestyle=':')
+    plt.legend(loc='upper right', fontsize=legend_font_size)
+    ax.set_xlabel('Threshold', fontsize=label_font_size)
+    ax.set_ylabel('Set Size', fontsize=label_font_size)
+    ax.set_title('Lemma 1 Analysis', fontsize=title_font_size)
+    plt.tight_layout()
+    if save_as is not None:
+        filename = save_as+'_lemma1.eps'
+        fig.savefig(filename, bbox_inches='tight')
+
+    # Pairwise Precision
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111)
+    #ax.grid(linestyle='--')
+    ci_legend_proxy = Rectangle((0, 0), 1, 1, fc="#BFBFBF")
+    ax.fill_between(thresholds, precision_bound_lower_ci, precision_bound_upper_ci, color='#BFBFBF', linewidth=0.0)
+    ax1, = ax.plot(thresholds, precision, label='True Precision', linewidth=2, color='k', linestyle=':')  #4477AA
+    ax1.set_dashes([2, 4])
+    ax2, = ax.plot(thresholds, precision_bound, label='Estimated Lower Bound', linewidth=2, color='k')  #4477AA
+    plt.legend([ax1, ax2, ci_legend_proxy], ['True Precision', 'Estimated Lower Bound', '95% CI'], loc='upper left', fontsize=legend_font_size, handlelength=3)
+    ax.set_xlabel('Match Threshold', fontsize=label_font_size)
+    ax.set_ylabel('Pairwise Precision', fontsize=label_font_size)
+    #ax.set_title('Pairwise Precision', fontsize=title_font_size)
+    ax.set_ylim([0, 1.05])
+    plt.yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    plt.tight_layout()
+    if save_as is not None:
+        filename = save_as + '_precision.eps'
+        fig.savefig(filename, bbox_inches='tight')
+
+    # Pairwise Recall
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111)
+    ci_legend_proxy = Rectangle((0, 0), 1, 1, fc="#BFBFBF")
+    ax.fill_between(thresholds, recall_bound_lower_ci, recall_bound_upper_ci, color='#BFBFBF', linewidth=0.0, label='95% CI')
+    ax1, = ax.plot(thresholds, recall, label='True Recall', linewidth=2, color='k', linestyle=':')  #'#CC6677'
+    ax1.set_dashes([2, 4])
+    ax2, = ax.plot(thresholds, recall_bound, label='Estimated Lower Bound', linewidth=2, color='k')  #'#CC6677'
+    plt.legend([ax1, ax2, ci_legend_proxy], ['True Recall', 'Estimated Lower Bound', '95% CI'], loc='lower left', fontsize=legend_font_size, handlelength=3)
+    ax.set_xlabel('Match Threshold', fontsize=label_font_size)
+    ax.set_ylabel('Pairwise Recall', fontsize=label_font_size)
+    #ax.set_title('Pairwise Recall', fontsize=title_font_size)
+    ax.set_ylim([0, 1.05])
+    plt.yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    plt.tight_layout()
+    if save_as is not None:
+        filename = save_as+'_recall.eps'
+        fig.savefig(filename, bbox_inches='tight')
+    print 'Finished plotting'
+    plt.show()
 
 
 def get_pairwise_class_balance(labels):
@@ -588,8 +647,10 @@ def get_pairwise_class_balance(labels):
     :param labels: Corresponding labels for the database object. Dict of [record id, label]
     :return class_balance: Percent of positive pairs in database, [0, 1.0]
     """
-    print 'Calculating class balance'
+    print 'Calculating class balance for labels:'
+    print(labels)
     number_records = len(labels)
+
     total_number_pairs = number_records*(number_records-1)/2
     print '     Total number of pairs:', total_number_pairs
     clusters = _cluster(labels)
@@ -605,10 +666,10 @@ def get_pairwise_class_balance(labels):
 
 def main():
     #### Real Experiment ####
-    number_thresholds = 15
-    dataset_name = 'restaurant'  # synthetic, restaurant, abt-buy
+    number_thresholds = 30
+    dataset_name = 'trafficking'  # synthetic, synthetic_2d, synthetic_sizes, restaurant, abt-buy, trafficking
 
-    if dataset_name == 'synthetic':
+    if dataset_name == 'synthetic_2d':
         number_entities = 10
         records_per_entity = 30
         train_database_size = 100
@@ -618,7 +679,187 @@ def main():
                                                    train_database_size, validation_database_size,
                                                    train_class_balance, number_thresholds)
         synthetic_plot = synthetic_experiment.ResultsPlot(synthetic_experiment)
-        pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
+        #pickle.dump(synthetic_experiment, open('synthetic_experiment.p', 'wb'))
+    elif dataset_name == 'synthetic_sizes':  # synthetic datasets at various sizes, to show degredation of performance
+        resolution = 88
+        number_features = 10
+        number_entities = np.linspace(10, 100, num=resolution)
+        number_entities = number_entities.astype(int)
+        records_per_entity = 10
+        #train_database_size = 100
+        train_class_balance = 0.5
+        #validation_database_size = 100
+        corruption_multiplier = .001
+
+
+        databases = list()
+        db = SyntheticDatabase(number_entities[0], records_per_entity, number_features=number_features)
+        databases.append(deepcopy(db))
+        add_entities = [x - number_entities[i - 1] for i, x in enumerate(number_entities)][1:]
+        for add in add_entities:
+            db.add(add, records_per_entity)
+            databases.append(deepcopy(db))
+        corruption = np.random.normal(loc=0.0, scale=1.0, size=[number_entities[-1]*records_per_entity, number_features])
+        train = deepcopy(databases[0])
+        validation = deepcopy(databases[0])
+        train.corrupt(corruption_multiplier*np.random.normal(loc=0.0, scale=1.0, size=[len(train.database.records), number_features]))
+        validation.corrupt(corruption_multiplier*np.random.normal(loc=0.0, scale=1.0, size=[len(train.database.records), number_features]))
+        for db in databases:
+            db.corrupt(corruption_multiplier*corruption[:len(db.database.records), :])
+        er = EntityResolution()
+        train_pair_seed = generate_pair_seed(train.database, train.labels, train_class_balance)
+        weak_match_function = er.train(train.database, train.labels, train_pair_seed)
+        ROC = weak_match_function.test(validation.database, validation.labels, 0.5)
+        #ROC.make_plot()
+
+        ## Optimize ER on small dataset
+        thresholds = np.linspace(0, 1.0, 10)
+        metrics_list = list()
+        #new_metrics_list = list()
+        pairwise_precision = list()
+        pairwise_recall = list()
+        pairwise_f1 = list()
+        for threshold in thresholds:
+            labels_pred = er.run(deepcopy(databases[0].database), weak_match_function, threshold, single_block=True,
+                                 match_type='weak', max_block_size=np.Inf, cores=1)
+            met = Metrics(databases[0].labels, labels_pred)
+            metrics_list.append(met)
+            pairwise_precision.append(met.pairwise_precision)
+            pairwise_recall.append(met.pairwise_recall)
+            pairwise_f1.append(met.pairwise_f1)
+            #class_balance_test = get_pairwise_class_balance(databases[0].labels)
+            #new_metrics_list.append(NewMetrics(databases[0].database, er, class_balance_test))
+        plt.plot(thresholds, pairwise_precision, label='Precision')
+        plt.plot(thresholds, pairwise_recall, label='Recall')
+        plt.plot(thresholds, pairwise_f1, label='F1')
+        plt.xlabel('Threshold')
+        plt.legend()
+        plt.ylabel('Score')
+        plt.title('Optimizing ER on small dataset')
+        #i = np.argmax(np.array(pairwise_f1))
+        #small_optimal_threshold = thresholds[i]  # optimize this
+        small_optimal_threshold = 0.6
+        print 'Optimal small threshold set at =', small_optimal_threshold
+        plt.show()
+
+        ## Possible score by optimizing on larger dataset
+        metrics_list = list()
+        pairwise_precision = list()
+        pairwise_recall = list()
+        pairwise_f1 = list()
+        thresholds_largedataset = np.linspace(0.6, 1.0, 8)
+        precision_lower_bound = list()
+        recall_lower_bound = list()
+        f1_lower_bound = list()
+        for threshold in thresholds_largedataset:
+            labels_pred = er.run(deepcopy(databases[-1].database), weak_match_function, threshold, single_block=True,
+                                 match_type='weak', max_block_size=np.Inf, cores=1)
+            met = Metrics(databases[-1].labels, labels_pred)
+            metrics_list.append(met)
+            pairwise_precision.append(met.pairwise_precision)
+            pairwise_recall.append(met.pairwise_recall)
+            pairwise_f1.append(met.pairwise_f1)
+            class_balance_test = get_pairwise_class_balance(databases[-1].labels)
+            new_metric = NewMetrics(databases[-1].database, er, class_balance_test)
+            precision_lower_bound.append(new_metric.precision_lower_bound)
+            recall_lower_bound.append(new_metric.recall_lower_bound)
+            f1_lower_bound.append(new_metric.f1_lower_bound)
+        plt.plot(thresholds_largedataset, pairwise_precision, label='Precision', color='r')
+        plt.plot(thresholds_largedataset, pairwise_recall, label='Recall', color='b')
+        plt.plot(thresholds_largedataset, pairwise_f1, label='F1', color='g')
+        plt.plot(thresholds_largedataset, precision_lower_bound, label='Precision Bound', color='r', linestyle=':')
+        plt.plot(thresholds_largedataset, recall_lower_bound, label='Recall Bound', color='b', linestyle=':')
+        plt.plot(thresholds_largedataset, f1_lower_bound, label='F1 Bound', color='g', linestyle=':')
+        i = np.argmax(np.array(f1_lower_bound))
+        large_optimal_threshold = thresholds_largedataset[i]
+        print 'Optimal large threshold automatically set at =', large_optimal_threshold
+        print 'If not correct: debug.'
+        plt.xlabel('Threshold')
+        plt.legend()
+        plt.ylabel('Score')
+        plt.title('Optimizing ER on large dataset')
+        plt.show()
+
+        ## Run on all dataset sizes
+        #new_metrics_list = list()
+        database_sizes = list()
+        small_pairwise_precision = list()
+        small_pairwise_recall = list()
+        small_pairwise_f1 = list()
+        large_precision_bound = list()
+        large_precision_bound_lower_ci = list()
+        large_precision_bound_upper_ci = list()
+        large_precision = list()
+        large_recall_bound = list()
+        large_recall_bound_lower_ci = list()
+        large_recall_bound_upper_ci = list()
+        large_recall = list()
+        large_f1 = list()
+        large_f1_bound = list()
+        for db in databases:
+            print 'Analyzing synthetic database with', len(db.database.records), 'records'
+            database_sizes.append(len(db.database.records))
+            labels_pred = er.run(db.database, weak_match_function, small_optimal_threshold, single_block=True, match_type='weak',
+                                 max_block_size=np.Inf, cores=1)
+            met = Metrics(db.labels, labels_pred)
+            small_pairwise_precision.append(met.pairwise_precision)
+            small_pairwise_recall.append(met.pairwise_recall)
+            small_pairwise_f1.append(met.pairwise_f1)
+
+            labels_pred = er.run(db.database, weak_match_function, large_optimal_threshold, single_block=True, match_type='weak',
+                                 max_block_size=np.Inf, cores=1)
+            met = Metrics(db.labels, labels_pred)
+            large_precision.append(met.pairwise_precision)
+            large_recall.append(met.pairwise_recall)
+            large_f1.append(met.pairwise_f1)
+            class_balance_test = get_pairwise_class_balance(db.labels)
+            new_metric = NewMetrics(db.database, er, class_balance_test)
+            large_precision_bound.append(new_metric.precision_lower_bound)
+            large_recall_bound.append(new_metric.recall_lower_bound)
+            large_f1_bound.append(new_metric.f1_lower_bound)
+            large_precision_bound_lower_ci.append(new_metric.precision_lower_bound_lower_ci)
+            large_precision_bound_upper_ci.append(new_metric.precision_lower_bound_upper_ci)
+            large_recall_bound_lower_ci.append(new_metric.recall_lower_bound_lower_ci)
+            large_recall_bound_upper_ci.append(new_metric.recall_lower_bound_upper_ci)
+
+        with open('synthetic_sizes.csv', 'wb') as f:
+            f.write('Database size, Precision (small opt), Recall (small opt), F1 (small opt), Precision (large opt), Precision bound (large opt), Lower CI, Upper CI, Recall (large opt), Recall bound (large opt), Lower CI, Upper CI, F1 (large opt), F1 bound (large opt)\n')
+            writer = csv.writer(f)
+            writer.writerows(izip(database_sizes, small_pairwise_precision, small_pairwise_recall, small_pairwise_f1, large_precision, large_precision_bound, large_precision_bound_lower_ci, large_precision_bound_upper_ci, large_recall, large_recall_bound, large_recall_bound_lower_ci, large_recall_bound_upper_ci, large_f1, large_f1_bound))
+        f.close()
+        plt.figure()
+        plt.plot(database_sizes, pairwise_precision, label='Precision', color='#4477AA', linewidth=3)
+        plt.plot(database_sizes, pairwise_recall, label='Recall', color='#CC6677', linewidth=3)
+        #plt.plot(database_sizes, pairwise_f1, label='F1', color='#DDCC77', linewidth=2)
+        plt.ylim([0, 1.05])
+        plt.yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+        plt.legend(title='Pairwise:', loc='lower left')
+        plt.xlabel('Number of Records')
+        plt.ylabel('Pairwise Score')
+        plt.title('Performance Degredation')
+        plt.show()
+    elif dataset_name == 'synthetic':
+        number_entities = 100
+        records_per_entity = 10
+        train_database_size = 200
+        train_class_balance = 0.5
+        validation_database_size = 200
+        corruption = 0.001  #0.025
+        number_thresholds = 30
+        number_features = 10
+
+        synthetic_database = SyntheticDatabase(number_entities, records_per_entity, number_features=number_features)
+        corruption_array = corruption*np.random.normal(loc=0.0, scale=1.0, size=[validation_database_size,
+                                                       synthetic_database.database.feature_descriptor.number])
+        synthetic_database.corrupt(corruption_array)
+        synthetic_train = synthetic_database.sample_and_remove(train_database_size)
+        synthetic_validation = synthetic_database.sample_and_remove(validation_database_size)
+        synthetic_test = synthetic_database
+        thresholds = np.linspace(0, 1, number_thresholds)
+        experiment = Experiment(synthetic_train.database, synthetic_validation.database, synthetic_test.database,
+                                synthetic_train.labels, synthetic_validation.labels, synthetic_test.labels,
+                                train_class_balance, thresholds)
+        experiment.plot()
     else:
         if dataset_name == 'restaurant':  # 864 records, 112 matches
             features_path = '../data/restaurant/merged.csv'
@@ -626,21 +867,28 @@ def main():
             train_database_size = 300
             train_class_balance = .4
             validation_database_size = 200
+            database = Database(annotation_path=features_path)
         elif dataset_name == 'abt-buy':  # ~4900 records, 1300 matches
             features_path = '../data/Abt-Buy/merged.csv'
             labels_path = '../data/Abt-Buy/labels.csv'
-            train_database_size = 1500
-            number_train_pairs = 500
-            number_test_pairs = 200
+            train_database_size = 300
+            train_class_balance = 0.4
+            validation_database_size = 300
+            database = Database(annotation_path=features_path)
+        elif dataset_name == 'trafficking':
+            features_path = '../data/trafficking/features.csv'
+            labels_path = '../data/trafficking/labels.csv'
+            train_database_size = 3000
+            train_class_balance = 0.4
+            validation_database_size = 3000
+            database = Database(annotation_path=features_path)
         else:
             raise Exception('Invalid dataset name')
-
         thresholds = np.linspace(0, 1, number_thresholds)
-        database = Database(annotation_path=features_path)
+        labels = np.loadtxt(open(labels_path, 'rb'))
         database_train = database.sample_and_remove(train_database_size)
         database_validation = database.sample_and_remove(validation_database_size)
         database_test = database
-        labels = np.loadtxt(open(labels_path, 'rb'))
         labels_train = dict()
         labels_validation = dict()
         labels_test = dict()
@@ -653,12 +901,13 @@ def main():
                 labels_test[identifier] = label
             else:
                 raise Exception('Record identifier ' + str(identifier) + ' not in either database')
+
         experiment = Experiment(database_train, database_validation, database_test,
                                 labels_train, labels_validation, labels_test,
                                 train_class_balance, thresholds)
         #print 'Saving results'
         #pickle.dump(experiment, open('experiment.p', 'wb'))
-        plot = experiment.ResultsPlot(experiment)
+        experiment.plot()
     print 'Finished'
 
 if __name__ == '__main__':

@@ -26,21 +26,29 @@ class RocCurve(object):
         self.precision = np.cumsum(self.labels).astype('float')/np.arange(1, len(self.labels)+1)
         self.f1 = 2*self.precision*self.recall/(self.precision + self.recall)
 
+        precision_wilson_n = np.arange(1, len(self.labels)+1)
+        recall_wilson_n = np.sum(self.labels)*np.ones(self.recall.size)
+
         # Reverse all the arrays and lists to prob is in ascending order
         self.labels = self.labels[::-1]
         self.prob = self.prob[::-1]
         self.tpr = self.prob[::-1]
         self.recall = self.recall[::-1]
-
         self.fpr = self.fpr[::-1]
         self.precision = self.precision[::-1]
         self.f1 = self.f1[::-1]
+        precision_wilson_n = precision_wilson_n[::-1]
+        recall_wilson_n = recall_wilson_n[::-1]
 
-        # Pad with a value at prob=0.0
+        # Pad with a value at prob=1.0
         self.prob = np.append(self.prob, 1.0)
         self.recall = np.append(self.recall, 0.0)
         self.precision = np.append(self.precision, 1.0)
         self.f1 = np.append(self.f1, 0.0)
+        precision_wilson_n = np.append(precision_wilson_n, 1.0)  # theoretically zero, but confidence interval would go to infinity
+        recall_wilson_n = np.append(recall_wilson_n, recall_wilson_n[-1])
+        self.precision_lower_ci, self.precision_upper_ci = wilson_confidence(self.precision, precision_wilson_n)
+        self.recall_lower_ci, self.recall_upper_ci = wilson_confidence(self.recall, recall_wilson_n)
 
         self.auc = auc(self.fpr, self.tpr)
         print '     Label, Threshold, Precision, Recall'

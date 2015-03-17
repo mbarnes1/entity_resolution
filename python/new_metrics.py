@@ -15,14 +15,13 @@ class NewMetrics(object):
         :param class_balance_test: The predicted class balance in database
         """
         print 'Evaluating new metric...'
-        self.database = database
         self.class_balance_test = class_balance_test
-        self.er = entity_resolution
+        self.match_function = entity_resolution._match_function
         # self.net_expected_cost = self.get_net_expected_cost()
         # self.greedy_best_cost = self.get_net_greedy_cost('best')
         # self.greedy_worst_cost = self.get_net_greedy_cost('worst')
-        self.recall_lower_bound = self._pairwise_recall_lower_bound()
-        self.precision_lower_bound, self.TP_FP_match, self.TP_FP_swoosh = self._pairwise_precision_lower_bound()
+        self.recall_lower_bound, self.recall_lower_bound_lower_ci, self.recall_lower_bound_upper_ci = self._pairwise_recall_lower_bound()
+        self.precision_lower_bound, self.precision_lower_bound_lower_ci, self.precision_lower_bound_upper_ci, self.TP_FP_match, self.TP_FP_swoosh = self._pairwise_precision_lower_bound(entity_resolution, database)
         self.f1_lower_bound = 2*self.precision_lower_bound*self.recall_lower_bound/(self.precision_lower_bound + self.recall_lower_bound)
         print 'new metric evaluated.'
 
@@ -31,57 +30,73 @@ class NewMetrics(object):
         Lower bounds the pairwise recall
         :return recall_lower_bound:
         """
-        threshold = self.er._match_function.decision_threshold
+        threshold = self.match_function.decision_threshold
         print 'Lower bounding pairwise recall at threshold', threshold
-        index = bisect_left(self.er._match_function.roc.prob, threshold)  # first occurence of this threshold
-        print 'Validation set match recall', self.er._match_function.roc.recall[index]
-        recall_lower_bound = self.er._match_function.roc.recall[index]
-        return recall_lower_bound
+        index = bisect_left(self.match_function.roc.prob, threshold)  # first occurence of this threshold
+        print 'Validation set match recall', self.match_function.roc.recall[index]
+        recall_lower_bound = self.match_function.roc.recall[index]
+        recall_lower_bound_lower_ci = self.match_function.roc.recall_lower_ci[index]
+        recall_lower_bound_upper_ci = self.match_function.roc.recall_upper_ci[index]
+        return recall_lower_bound, recall_lower_bound_lower_ci, recall_lower_bound_upper_ci
 
-    def _pairwise_precision_lower_bound(self):
+    def _pairwise_precision_lower_bound(self, entity_resolution, database):
         """
         Lower bounds the pairwise precision
         :return precision_lower_bound:
         """
-        threshold = self.er._match_function.decision_threshold
+        threshold = self.match_function.decision_threshold
         print 'Lower bounding pairwise precision at threshold', threshold
-        print '     ROC prob:'
-        print self.er._match_function.roc.prob
-        index = bisect(self.er._match_function.roc.prob, threshold) - 1  # first occurence of this threshold
+        index = bisect(self.match_function.roc.prob, threshold) - 1  # first occurence of this threshold
         if index >= 0:
-            match_precision_validation = self.er._match_function.roc.precision[index]
+            match_precision_validation = self.match_function.roc.precision[index]
+            match_precision_validation_upper_ci = self.match_function.roc.precision_upper_ci[index]
+            match_precision_validation_lower_ci = self.match_function.roc.precision_lower_ci[index]
         elif index == -1:
-            match_precision_validation = self.er._match_function.roc.precision[0]
+            match_precision_validation = self.match_function.roc.precision[0]
+            match_precision_validation_upper_ci = self.match_function.roc.precision_upper_ci[0]
+            match_precision_validation_lower_ci = self.match_function.roc.precision_lower_ci[0]
         else:
             raise IndexError
         print '     Validation set match precision =', match_precision_validation
-        class_balance_validation = self.er._match_function.roc.class_balance
+        class_balance_validation = self.match_function.roc.class_balance
         print '     Rebalancing precision for validation class balance', class_balance_validation
         print '     and test set class balance', self.class_balance_test
         match_precision_test = rebalance_precision(match_precision_validation, class_balance_validation, self.class_balance_test)
+        match_precision_test_upper_ci = rebalance_precision(match_precision_validation_upper_ci, class_balance_validation, self.class_balance_test)
+        match_precision_test_lower_ci = rebalance_precision(match_precision_validation_lower_ci, class_balance_validation, self.class_balance_test)
         print '     Expected test set match precision', match_precision_test
         total_swoosh_pairs = 0  # number of predicted intercluster pairs
         total_match_pairs = 0  # number of predicted intercluster pairs that directly match
-        for cluster in self.er.entities:
+        for cluster in entity_resolution.entities:
             print '     Analyzing cluster:'
             cluster.display(indent='        ')
             cluster_swoosh_pairs = len(cluster.line_indices)*(len(cluster.line_indices)-1)/2
             print '     Cluster swoosh pairs:', cluster_swoosh_pairs
             pairs = combinations(cluster.line_indices, 2)
+            number_pairs = len(cluster.line_indices)*(len(cluster.line_indices)-1)/2
             cluster_match_pairs = 0
-            for pair in pairs:
-                r1 = self.database.records[pair[0]]
-                r2 = self.database.records[pair[1]]
-                match, _, _ = self.er._match_function.match(r1, r2, 'weak')
+            for counter, pair in enumerate(pairs):
+                print '     Checking match ', counter, 'of', number_pairs, 'pairs to lower bound precision'
+                r1 = database.records[pair[0]]
+                r2 = database.records[pair[1]]
+                match, _, _ = self.match_function.match(r1, r2, 'weak')
                 cluster_match_pairs += match
             print '     Cluster match pairs:', cluster_match_pairs
             total_swoosh_pairs += cluster_swoosh_pairs
             total_match_pairs += cluster_match_pairs
-        precision_lower_bound = match_precision_test*total_match_pairs/total_swoosh_pairs if total_swoosh_pairs else 1.0
+        if total_swoosh_pairs:
+            precision_lower_bound = match_precision_test*total_match_pairs/total_swoosh_pairs
+            precision_lower_bound_upper_ci = match_precision_test_upper_ci*total_match_pairs/total_swoosh_pairs
+            precision_lower_bound_lower_ci = match_precision_test_lower_ci*total_match_pairs/total_swoosh_pairs
+        else:
+            precision_lower_bound = 1.0
+            precision_lower_bound_upper_ci = 1.0
+            precision_lower_bound_lower_ci = 1.0
         print '     Total match pairs:', total_match_pairs
         print '     Total swoosh pairs:', total_swoosh_pairs
         print '     Precision lower bound:', precision_lower_bound
-        return precision_lower_bound, total_match_pairs, total_swoosh_pairs
+        return precision_lower_bound, precision_lower_bound_lower_ci, precision_lower_bound_upper_ci, \
+               total_match_pairs, total_swoosh_pairs
 
     def _get_records(self, entity_index):
         """
@@ -216,7 +231,7 @@ def rebalance_recall(recall_1, class_balance_1, class_balance_2):
     :param class_balance_2: Float [0, 1.0]. P/(P+N)
     :return recall_1:
     """
-    recall_2 = recall_2  # unaffected by class balance
+    recall_2 = recall_1  # unaffected by class balance
     return recall_2
 
 
@@ -228,7 +243,7 @@ def rebalance_precision(precision_1, class_balance_1, class_balance_2):
     :param class_balance_2: Float [0, 1.0]. P/(P+N)
     :return precision_2:
     """
-    precision_2 = class_balance_2*precision_1/(class_balance_2*precision_1 + class_balance_1*(1-precision_1))
+    precision_2 = (1-class_balance_1)*class_balance_2*precision_1/(class_balance_1-class_balance_1*class_balance_2-class_balance_1*precision_1+class_balance_2*precision_1)
     return precision_2
 
 

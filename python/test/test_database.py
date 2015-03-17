@@ -39,7 +39,7 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(len(database.records), 409)
 
     def test_synthetic(self):
-        synthetic = SyntheticDatabase(10, 10, number_features=10, sigma=0)  # 100 records, 10 entities, 10 records each
+        synthetic = SyntheticDatabase(10, 10, number_features=10)  # 100 records, 10 entities, 10 records each
         self.assertEqual(len(synthetic.labels), 100)
         self.assertEqual(synthetic.labels[0], 0)
         self.assertEqual(synthetic.labels[99], 9)
@@ -59,7 +59,7 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(len(synthetic.database.records[0].features), 2)
 
     def test_synthetic_sample_and_remove(self):
-        synthetic = SyntheticDatabase(10, 10, sigma=0)  # 100 records, 10 entities, 10 records each
+        synthetic = SyntheticDatabase(10, 10, number_features=3)  # 100 records, 10 entities, 10 records each
         synthetic2 = synthetic.sample_and_remove(50)
         self.assertEqual(len(synthetic.database.records), 50)
         self.assertEqual(len(synthetic2.database.records), 50)
@@ -67,6 +67,12 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(set(synthetic2.database.records.keys()), set(synthetic2.labels.keys()))
         self.assertEqual(len(set(synthetic.database.records.keys()) & set(synthetic2.database.records.keys())), 0)
         self.assertEqual(len(set(synthetic.labels.keys()) & set(synthetic2.labels.keys())), 0)
+
+    def test_synthetic_add(self):
+        synthetic = SyntheticDatabase(10, 10, number_features=3)  # 100 records, 10 entities, 10 records each
+        self.assertEqual(len(synthetic.database.records), 100)
+        synthetic.add(5, 10)
+        self.assertEqual(len(synthetic.database.records), 150)
 
     def test_dump(self):
         database = Database(self._test_path)
@@ -76,7 +82,7 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(database, database2)
 
     def test_plot(self):
-        synthetic_original = SyntheticDatabase(10, 5, sigma=0)
+        synthetic_original = SyntheticDatabase(10, 5)
         synthetic_original.plot(synthetic_original.labels, title='No Noise')
         plt.show()
         synthetic_noise = deepcopy(synthetic_original)
@@ -86,7 +92,7 @@ class MyTestCase(unittest.TestCase):
         plt.show()
 
     def test_corrupt(self):
-        synthetic = SyntheticDatabase(3, 3, number_features=2, sigma=0)
+        synthetic = SyntheticDatabase(3, 3, number_features=2)
         self.assertEqual(synthetic.database.records[0].features, synthetic.database.records[1].features)
         corruption = list(np.random.normal(loc=0.0, scale=1.0, size=[9, 2]))
         synthetic.corrupt(corruption)
