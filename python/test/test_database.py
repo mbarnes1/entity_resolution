@@ -98,5 +98,23 @@ class MyTestCase(unittest.TestCase):
         synthetic.corrupt(corruption)
         self.assertNotEqual(synthetic.database.records[0].features, synthetic.database.records[1].features)
 
+    def test_merge(self):
+        """
+        Tests whether database correctly merges with manual cluster labels
+        """
+        database = Database(self._test_path)
+        cluster_labels = \
+            {0: 'A',
+             1: 'B',
+             2: 'A',
+             3: 'B'}
+        database.merge(cluster_labels)
+        self.assertEqual(len(database.records), 2)
+        for _, record in database.records.iteritems():
+            self.assertEqual(len(record.line_indices), 2)
+        self.assertEqual(database.records[0].line_indices, {0, 2})
+        self.assertEqual(database.records[1].line_indices, {1, 3})
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -250,23 +250,6 @@ def _cluster(labels):
         clusters.add(frozenset(ads))
     return frozenset(clusters)
 
-# def _cluster(labels):
-#     """
-#     :param labels: Cluster labels. Iterable with length n.
-#     :return clusters: Frozen set of clusters. Each cluster is a frozen set of ad ids
-#     """
-#     cluster_to_ads = dict()
-#     for index, label in enumerate(labels):
-#         if label in cluster_to_ads:
-#             cluster_to_ads[label].append(index)
-#         else:
-#             cluster_to_ads[label] = [index]
-#     ## Convert to frozen sets
-#     clusters = set()
-#     for _, ads in cluster_to_ads.iteritems():
-#         clusters.add(frozenset(ads))
-#     return frozenset(clusters)
-
 
 def _intersection_size(clusters_estimate, clusters_truth):
     """

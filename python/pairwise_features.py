@@ -1,118 +1,10 @@
 """
-All pairwise features and functions. This includes training and testing the match function.
+All pairwise features and functions
 """
-import sys
-print sys.path
-import sklearn
-from sklearn import linear_model
 import numpy as np
 from math import e
-from roc import RocCurve
 from itertools import izip
 import Levenshtein
-__author__ = 'mbarnes1'
-if sklearn.__version__ != '0.16-git':
-    raise Exception('Invalid version of sklearn')
-
-
-class SurrogateMatchFunction(object):
-    """
-    The all important match function, named after the surrogate labels it uses for training
-    """
-    def __init__(self, decision_threshold=1):
-        self.x2_mean = []
-        self.roc = []
-        self.logreg = linear_model.LogisticRegression(solver='lbfgs')
-        self.decision_threshold = decision_threshold
-
-    def train(self, database_train, labels_train, pair_seed):
-        """
-        Get training samples and trains the surrogate match function
-        :param database_train: Training database
-        :param labels_train: Dictionary of [identier, cluster label]
-        :param pair_seed: List of pairs to use
-        :return pairs: Set of pairs. Each pair is a list with two entries, the two ad identifiers
-        """
-        x1_train, x2_train, self.x2_mean = get_pairwise_features(database_train, labels_train, pair_seed)
-        bounds = list()
-        for _ in range(x2_train.shape[1]):
-            bounds.append((None, 0))  # restrict all feature weights to be negative (convex set)
-        bounds.append((None, None))  # no bounds for the constant offset term
-        print 'Training Logistic Regression pairwise match function...'
-        print '     Pos/Neg training sample class split: ', sum(x1_train), '/', len(x1_train) - sum(x1_train)
-        print '     Enforcing weight vector bounds:'
-        for counter, bound in enumerate(bounds):
-            print '         Feature', counter, ': ', bounds
-        print '         (last term is intercept)'
-        self.logreg.bounds = bounds
-        self.logreg.fit(x2_train, x1_train)
-        print 'Model coefficients: ', self.logreg.coef_
-        print 'Intercept: ', self.logreg.intercept_
-
-    def test(self, database_test, labels_test, class_balance):
-        """
-        Get testing samples and test the surrogate match function. Evaluated with ROC curve
-        :param database_test: RecordDatabase object
-        :param test_size: Number of pairwise samples to use in testing
-        :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
-        :return RocCurve: An RocCurve object
-        """
-        self.class_balance_validation = class_balance
-        pair_seed = generate_pair_seed(database_test, labels_test, class_balance)
-        x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, pair_seed)
-        x1_bar_probability = self.logreg.predict_proba(x2_test)[:, 1]
-        #output = np.column_stack((x1_test, x1_bar_probability))
-        #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
-        roc = RocCurve(x1_test, x1_bar_probability)
-        self.roc = roc
-        sorted_indices = np.argsort(-1*x1_bar_probability)
-        for sorted_index in sorted_indices:
-            x1_bar = x1_bar_probability[sorted_index]
-            pair = pair_seed[sorted_index]
-            print 'Test pair P(match) = ', x1_bar
-            database_test.records[pair[0]].display(indent='     ')
-            print '     ----'
-            database_test.records[pair[1]].display(indent='     ')
-        return roc
-
-    def match(self, r1, r2, match_type):
-        """
-        Determines if two records match
-        :param r1: Record object
-        :param r2: Record object
-        :param match_type: Match type use in ER algorithm. String 'exact', 'strong', 'weak', or 'weak_strong'
-        :return: False or True, whether r1 and r2 match
-        :return p_x1: Probability of weak match
-        :return strength: Type of matches that occurred. 'strong', 'weak', 'both', or 'none'
-        """
-        x1 = get_x1(r1, r2)
-        if np.isnan(x1):
-            x1 = False
-        x2 = get_x2(r1, r2)
-        np.copyto(x2, self.x2_mean, where=np.isnan(x2))  # mean imputation
-        p_x1 = self.logreg.predict_proba(x2)[0, 1]
-        x1_hat = p_x1 > self.decision_threshold
-        if r1 == r2:
-            strength = 'exact'  # if records are the same, to satisfy Idempotence property
-            return True, p_x1, strength
-        elif x1 and x1_hat:
-            strength = 'both'  # both match
-            return True, p_x1, strength
-        elif x1:
-            strength = 'strong'
-            if match_type == 'strong':
-                return True, p_x1, strength
-            else:
-                return False, p_x1, strength
-        elif x1_hat:
-            strength = 'weak'
-            if match_type == 'weak':
-                return True, p_x1, strength
-            else:
-                return False, p_x1, strength
-        else:
-            strength = 'none'
-            return False, p_x1, strength
 
 
 def generate_pair_seed(database, labels, class_balance):
@@ -133,6 +25,8 @@ def generate_pair_seed(database, labels, class_balance):
             cluster_to_records[cluster].append(index)
         else:
             cluster_to_records[cluster] = [index]
+    if len(cluster_to_records) == len(labels):
+        raise Exception('No positive matches exist')
     cluster_keys = cluster_to_records.keys()
     cluster_pair_sizes = []  # number of remaining pairs in each cluster
     print '     Calculating number of pairs in each cluster, for cluster sampling probability'
@@ -248,7 +142,7 @@ def get_pairwise_features(database, labels_train, pair_seed):
         if database._precomputed_x2:
             _x2 = get_precomputed_x2(database._precomputed_x2, r1, r2)
         else:
-            _x2 = get_x2(r1, r2)
+            _x2 = get_weak_pairwise_features(r1, r2)
         x2.append(_x2)
     x1 = np.asarray(x1)
     x2 = np.asarray(x2)
@@ -256,14 +150,14 @@ def get_pairwise_features(database, labels_train, pair_seed):
     return x1, x2, m
 
 
-def get_x2(r1, r2):
+def get_weak_pairwise_features(r1, r2):
     """
-    Calculates the weak feature vector x2 based on differences between two records
+    Calculates the weak feature vector based on differences between two records
     :param r1: Record object
     :param r2: Record object
     :return x2: 1-D vector with m entries, where m is number of weak features.
     """
-    x2 = list()
+    x = list()
     for index, (f1, f2, pairwise_use, strength) in enumerate(izip(r1.features, r2.features,
                                                                   r1.feature_descriptor.pairwise_uses,
                                                                   r1.feature_descriptor.strengths)):
@@ -273,24 +167,24 @@ def get_x2(r1, r2):
                 if not np.isnan(match):
                     match = not match  # Inverting sign, want smaller feature = better match
                                        # (restricting all log reg weights negative)
-                x2.append(match)
+                x.append(match)
             elif pairwise_use == 'numerical_difference':
-                x2.append(numerical_difference(f1, f2))  # smaller feature = better, OK
+                x.append(numerical_difference(f1, f2))  # smaller feature = better, OK
             elif pairwise_use == 'number_matches':
-                x2.append(np.exp(-number_matches(f1, f2)))  # Using exp(-x) to get smaller feature = better match
+                x.append(np.exp(-number_matches(f1, f2)))  # Using exp(-x) to get smaller feature = better match
             elif pairwise_use == 'special_date_difference':
-                x2.append(date_difference(f1, f2))  # smaller feature = better, OK
+                x.append(date_difference(f1, f2))  # smaller feature = better, OK
             elif pairwise_use == 'levenshtein':
-                x2.append(np.log(e + levenshtein(f1, f2)))  # smaller feature = better, OK. Using log to decrease weight of large mismatches
+                x.append(np.log(e + levenshtein(f1, f2)))  # smaller feature = better, OK. Using log to decrease weight of large mismatches
             else:
                 raise Exception('Invalid pairwise use: ' + pairwise_use)
-    x2 = np.asarray(x2)
-    return x2
+    x = np.asarray(x)
+    return x
 
 
-def get_x1(r1, r2):
+def strong_match(r1, r2):
     """
-    Calculates the strong feature value x1 based on differences between two records
+    Calculates the strong feature value based on differences between two records
     If any strong feature matches, x1 is True
     :param r1: Record object
     :param r2: Record object

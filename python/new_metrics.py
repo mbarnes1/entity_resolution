@@ -1,27 +1,24 @@
-from itertools import izip, combinations
-from copy import deepcopy
-import cPickle as pickle
+from itertools import combinations
 from bisect import bisect, bisect_left
-from numpy import Inf
 __author__ = 'mbarnes1'
 
 
 class NewMetrics(object):
-    def __init__(self, database, entity_resolution, class_balance_test):
+    """
+    Estimated lower bounds for pairwise precision, recall, and F1
+    """
+    def __init__(self, database, labels, match_function, class_balance_test):
         """
         Un/semi-supervised entity resolution metrics
         :param database: Reference to Database object
-        :param entity_resolution: Reference to EntityResolution object
+        :param match_function: Match function object
         :param class_balance_test: The predicted class balance in database
         """
         print 'Evaluating new metric...'
         self.class_balance_test = class_balance_test
-        self.match_function = entity_resolution._match_function
-        # self.net_expected_cost = self.get_net_expected_cost()
-        # self.greedy_best_cost = self.get_net_greedy_cost('best')
-        # self.greedy_worst_cost = self.get_net_greedy_cost('worst')
+        self.match_function = match_function
         self.recall_lower_bound, self.recall_lower_bound_lower_ci, self.recall_lower_bound_upper_ci = self._pairwise_recall_lower_bound()
-        self.precision_lower_bound, self.precision_lower_bound_lower_ci, self.precision_lower_bound_upper_ci, self.TP_FP_match, self.TP_FP_swoosh = self._pairwise_precision_lower_bound(entity_resolution, database)
+        self.precision_lower_bound, self.precision_lower_bound_lower_ci, self.precision_lower_bound_upper_ci, self.TP_FP_match, self.TP_FP_swoosh = self._pairwise_precision_lower_bound(database, labels)
         self.f1_lower_bound = 2*self.precision_lower_bound*self.recall_lower_bound/(self.precision_lower_bound + self.recall_lower_bound)
         print 'new metric evaluated.'
 
@@ -30,7 +27,7 @@ class NewMetrics(object):
         Lower bounds the pairwise recall
         :return recall_lower_bound:
         """
-        threshold = self.match_function.decision_threshold
+        threshold = self.match_function.get_decision_threshold()
         print 'Lower bounding pairwise recall at threshold', threshold
         index = bisect_left(self.match_function.roc.prob, threshold)  # first occurence of this threshold
         print 'Validation set match recall', self.match_function.roc.recall[index]
@@ -39,12 +36,21 @@ class NewMetrics(object):
         recall_lower_bound_upper_ci = self.match_function.roc.recall_upper_ci[index]
         return recall_lower_bound, recall_lower_bound_lower_ci, recall_lower_bound_upper_ci
 
-    def _pairwise_precision_lower_bound(self, entity_resolution, database):
+    def _pairwise_precision_lower_bound(self, database, labels):
         """
         Lower bounds the pairwise precision
+        :param database: Original database object
+        :param labels: Predicted labels of the database, of form [record_id, cluster_id]
         :return precision_lower_bound:
         """
-        threshold = self.match_function.decision_threshold
+        cluster_to_records = dict()
+        for record_id, cluster_id in labels.iteritems():
+            if cluster_id in cluster_to_records:
+                cluster_to_records[cluster_id].add(record_id)
+            else:
+                cluster_to_records[cluster_id] = {record_id}
+        threshold = self.match_function.get_decision_threshold()
+
         print 'Lower bounding pairwise precision at threshold', threshold
         index = bisect(self.match_function.roc.prob, threshold) - 1  # first occurence of this threshold
         if index >= 0:
@@ -66,23 +72,20 @@ class NewMetrics(object):
         match_precision_test_lower_ci = rebalance_precision(match_precision_validation_lower_ci, class_balance_validation, self.class_balance_test)
         print '     Expected test set match precision', match_precision_test
         total_swoosh_pairs = 0  # number of predicted intercluster pairs
-        total_match_pairs = 0  # number of predicted intercluster pairs that directly match
-        for cluster in entity_resolution.entities:
-            print '     Analyzing cluster:'
-            cluster.display(indent='        ')
-            cluster_swoosh_pairs = len(cluster.line_indices)*(len(cluster.line_indices)-1)/2
-            print '     Cluster swoosh pairs:', cluster_swoosh_pairs
-            pairs = combinations(cluster.line_indices, 2)
-            number_pairs = len(cluster.line_indices)*(len(cluster.line_indices)-1)/2
+        total_match_pairs = 0  # number of predicted intercluster pairs that directly matc
+        for cluster, record_ids in cluster_to_records.iteritems():
+            number_pairs = len(record_ids)*(len(record_ids)-1)/2
+            print '     Cluster swoosh pairs:', number_pairs
+            pairs = combinations(record_ids, 2)
             cluster_match_pairs = 0
             for counter, pair in enumerate(pairs):
                 print '     Checking match ', counter, 'of', number_pairs, 'pairs to lower bound precision'
                 r1 = database.records[pair[0]]
                 r2 = database.records[pair[1]]
-                match, _, _ = self.match_function.match(r1, r2, 'weak')
+                match, _ = self.match_function.match(r1, r2)
                 cluster_match_pairs += match
             print '     Cluster match pairs:', cluster_match_pairs
-            total_swoosh_pairs += cluster_swoosh_pairs
+            total_swoosh_pairs += number_pairs
             total_match_pairs += cluster_match_pairs
         if total_swoosh_pairs:
             precision_lower_bound = match_precision_test*total_match_pairs/total_swoosh_pairs
@@ -97,130 +100,6 @@ class NewMetrics(object):
         print '     Precision lower bound:', precision_lower_bound
         return precision_lower_bound, precision_lower_bound_lower_ci, precision_lower_bound_upper_ci, \
                total_match_pairs, total_swoosh_pairs
-
-    def _get_records(self, entity_index):
-        """
-        Returns a set of the records comprising entity_index
-        :param entity_index: Index of the entity in er to get records from
-        :return records: A set of the Record objects
-        """
-        entity = self.er.entities[entity_index]
-        records = set()
-        for index in entity.line_indices:
-            records.add(self.database.records[index])
-        return deepcopy(records)
-
-    def _random_path(self, entity_index):
-        """
-        Returns the cost of exploring a random path
-        :param entity_index: Index of entity in er to explore
-        :return path_cost: List of costs when creating the entity
-        """
-        records = self._get_records(entity_index)
-        swooshed, probability_list, strength_list = self.er.rswoosh(records, guarantee_random=True)
-        if len(swooshed) != 1:
-            print 'Invalid entity found. Dumping results.'
-            pickle.dump(self, open('invalid_entity_new_metric.p', 'wb'))
-            pickle.dump(records, open('invalid_entity_records.p', 'wb'))
-            raise Exception('Invalid entity, no path exists')
-        path_cost = list()
-        for strength, probability in izip(strength_list, probability_list):
-            if strength != 'none':  # if it was a match (valid path)
-                path_cost.append(_cost_function(probability))
-        return path_cost
-
-    def _expected_path_cost(self, entity_index):
-        """
-        Uses Monte Carlo sampling to determine the expected path cost of a single entity
-        :param entity_index:
-        :return expected_path_cost: The expected path cost
-        """
-        number_monte_carlo = 5  # number of samples to take
-        path_costs = list()
-        expected_path_cost = 0
-        while len(path_costs) < number_monte_carlo:
-            path_cost = self._random_path(entity_index)
-            path_costs.append(path_cost)
-            expected_path_cost += sum(path_cost)
-        expected_path_cost /= number_monte_carlo
-        return expected_path_cost
-
-    def get_net_expected_cost(self):
-        """
-        Computes the sum of the expected path cost for each entity
-        :return net_cost:
-        """
-        entity_indices = range(0, len(self.er.entities))
-        net_cost = 0
-        for entity_index in entity_indices:
-            expected_cost = self._expected_path_cost(entity_index)
-            net_cost += expected_cost
-        return net_cost
-
-    def get_net_greedy_cost(self, greedy_type):
-        """
-        Computes the sum of the greedy path cost over all entities
-        :param greedy_type: string, 'best' or 'worst'
-        :return net_cost:
-        """
-        print 'Evaluating greedy path cost at threshold', self.er._match_function.decision_threshold
-        entity_indices = range(0, len(self.er.entities))
-        net_cost = 0
-        for entity_index in entity_indices:
-            expected_cost = self._greedy_cost(entity_index, greedy_type=greedy_type)
-            net_cost += expected_cost
-        return net_cost
-
-    def _greedy_cost(self, entity_index, greedy_type):
-        """
-        Find the greedily best or worst merge path cost for a single entity,
-        defined as the path with highest or lowest cost at each step
-        :param entity_index:
-        :param greedy_type: string, 'best' or 'worst'
-        :return cost: the greedily best or worst path cost
-        """
-        if greedy_type not in {'worst', 'best'}:
-            raise Exception('Invalid input')
-        records_set = self._get_records(entity_index)
-        records = {frozenset(r.line_indices): r for r in records_set}
-
-        # Initialize cost dictionary
-        print '     Greedily exploring entity merge path with', len(records), 'records'
-        print '         Initializing cost dictionary for greedy path exploration...'
-        cost_dict = dict()
-        all_pairs = combinations([i for i in self.er.entities[entity_index].line_indices], 2)
-        for pair in all_pairs:
-            record1 = self.database.records[pair[0]]
-            record2 = self.database.records[pair[1]]
-            match, prob, _ = self.er._match_function.match(record1, record2, 'weak')
-            if prob > self.er._match_function.decision_threshold:
-                cost_dict[frozenset([frozenset([pair[0]]), frozenset([pair[1]])])] = _cost_function(prob)
-
-        indices1 = None
-        indices2 = None
-        net_cost = 0
-        while cost_dict:
-            if greedy_type == 'worst':
-                greedy_pair = _max_dict(cost_dict, remove=frozenset([indices1, indices2]))
-            else:
-                greedy_pair = _min_dict(cost_dict, remove=frozenset([indices1, indices2]))
-            net_cost += cost_dict[greedy_pair]
-            if len(cost_dict) == 1:
-                break
-            greedy_pair_list = list(greedy_pair)
-            indices1 = greedy_pair_list[0]
-            indices2 = greedy_pair_list[1]
-            record1 = records.pop(indices1)
-            record2 = records.pop(indices2)
-            indices = indices1.union(indices2)
-            record1.merge(record2)
-            for indices_buddy, record_buddy in records.iteritems():
-                match, prob, _ = self.er._match_function.match(record1, record_buddy, 'weak')
-                if prob > self.er._match_function.decision_threshold:
-                    pair = frozenset([indices, indices_buddy])
-                    cost_dict[pair] = _cost_function(prob)
-            records[indices] = record1
-        return net_cost
 
 
 def rebalance_recall(recall_1, class_balance_1, class_balance_2):
@@ -247,53 +126,30 @@ def rebalance_precision(precision_1, class_balance_1, class_balance_2):
     return precision_2
 
 
-def _min_dict(dictionary, remove=frozenset()):
+def count_pairwise_class_balance(labels):
     """
-    Finds the minimum value in a dictionary and returns the corresponding key
-    :param dictionary:
-    :param remove: Frozen set. Optionally remove any pairs with these identifiers during the search process
-    :return key:
+    Returns the percent of positive pairs out of all the pairs in database.
+    Eventually this should be automated with density estimates, using a train database, train labels, and test database
+    :param labels: Corresponding labels for the database object. Dict of [record id, label]
+    :return class_balance: Percent of positive pairs in database, [0, 1.0]
     """
-    min_value = Inf
-    min_key = None
-    keys_to_remove_later = []
-    for key, value in dictionary.iteritems():
-        if key & remove:  # any intersection?
-            keys_to_remove_later.append(key)
-        elif value < min_value:
-            min_value = value
-            min_key = key
-    for key in keys_to_remove_later:
-        dictionary.pop(key)
-    return min_key
+    print 'Calculating class balance for labels:'
+    print(labels)
+    number_records = len(labels)
 
-
-def _max_dict(dictionary, remove=frozenset()):
-    """
-    Finds the maximum value in a dictionary and returns the corresponding key
-    :param dictionary:
-    :param remove: Frozen set. Optionally remove any pairs with these identifiers during the search process
-    :return key:
-    """
-    max_value = -Inf
-    max_key = None
-    keys_to_remove_later = []
-    for key, value in dictionary.iteritems():
-        if key & remove:  # any intersection?
-            keys_to_remove_later.append(key)
-        elif value > max_value:
-            max_value = value
-            max_key = key
-    for key in keys_to_remove_later:
-        dictionary.pop(key)
-    return max_key
-
-
-def _cost_function(prob):
-    """
-    Given the match probability, returns the cost associated with a merge
-    :param prob: The match probability
-    :return cost: Resulting cost. Positive = bad. Negative = good.
-    """
-    cost = (1-prob) - 0.5
-    return cost
+    total_number_pairs = number_records*(number_records-1)/2
+    print '     Total number of pairs:', total_number_pairs
+    cluster_to_records = dict()
+    for record_id, cluster_id in labels.iteritems():
+        if cluster_id in cluster_to_records:
+            cluster_to_records[cluster_id].add(record_id)
+        else:
+            cluster_to_records[cluster_id] = {record_id}
+    total_number_positive_pairs = 0.0
+    for _, record_ids in cluster_to_records.iteritems():
+        number_cluster_pairs = len(record_ids)*(len(record_ids)-1)/2
+        total_number_positive_pairs += number_cluster_pairs
+    print '     Number of positive pairs:', total_number_positive_pairs
+    class_balance = total_number_positive_pairs/total_number_pairs
+    print '     Class balance:', class_balance
+    return class_balance

@@ -3,7 +3,6 @@ import numpy as np
 from numpy.random import choice
 import matplotlib.pyplot as plt
 from itertools import izip
-import sys
 __author__ = 'mbarnes1'
 
 
@@ -13,10 +12,10 @@ class SyntheticDatabase(object):
     """
     def __init__(self, number_entities, records_per_entity, number_features=2):
         """
-        Initials synthetic database with 10 features, uniformaly distributed from [0, 1]
+        Initializes synthetic database
         No initial corruption, so records from the same cluster have exact same features
         :param number_entities:
-        :param records_per_entity: Mean number of records per entity
+        :param records_per_entity: Number of records per entity
         :param number_features:
         """
         indices = range(0, number_features)
@@ -156,7 +155,6 @@ class Database(object):
         """
         self.records = dict()
         if annotation_path:
-            print sys.path
             ins = open(annotation_path, 'r')
             feature_names = next(ins).strip('\n').split(',')  # skip the first line, its a header
             feature_types = next(ins).strip('\n').split(',')  # variable type (e.g. int, string, date)
@@ -194,6 +192,23 @@ class Database(object):
         for line_index in line_indices:
             new_database.records[line_index] = self.records.pop(line_index)
         return new_database
+
+    def merge(self, labels):
+        """
+        Merges all records in the database according to the labels
+        :param labels: Dict of form [ad_id, cluster_id]
+        """
+        cluster_to_records = dict()
+        for record_id, cluster_id in labels.iteritems():
+            if cluster_id in cluster_to_records:
+                cluster_to_records[cluster_id].append(record_id)
+            else:
+                cluster_to_records[cluster_id] = [record_id]
+        for _, record_ids in cluster_to_records.iteritems():
+            merged_record = self.records[record_ids[0]]
+            for record_id in record_ids[1:]:
+                record = self.records.pop(record_id)
+                merged_record.merge(record)
 
     def dump(self, out_file):
         """

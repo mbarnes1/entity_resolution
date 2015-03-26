@@ -1,7 +1,8 @@
 __author__ = 'mbarnes1'
 import unittest
-from pairwise_features import SurrogateMatchFunction, mean_imputation, number_matches, numerical_difference, \
-    binary_match, get_x1, get_x2, get_pairwise_features, generate_pair_seed, get_precomputed_x2, levenshtein
+from pairwise_features import mean_imputation, number_matches, numerical_difference, \
+    binary_match, strong_match, get_weak_pairwise_features, get_pairwise_features, generate_pair_seed, levenshtein
+from logistic_match import LogisticMatchFunction
 from pipeline import fast_strong_cluster
 from database import Database
 from blocking import BlockingScheme
@@ -13,8 +14,10 @@ from copy import deepcopy
 class MyTestCase(unittest.TestCase):
     def setUp(self):
         self._database = Database('test_annotations_cleaned.csv')
+        labels = fast_strong_cluster(self._database)
+        pair_seed = generate_pair_seed(self._database, labels, 0.5)
         self._blocking = BlockingScheme(self._database)
-        self._surrogate = SurrogateMatchFunction(0.99)
+        self._match_function = LogisticMatchFunction(self._database, labels, pair_seed, 0.5)
 
     def test_pairs(self):
         database = Database('test_annotations_10000_cleaned.csv')
@@ -48,17 +51,11 @@ class MyTestCase(unittest.TestCase):
             3: 1
         }
         pair_seed = generate_pair_seed(self._database, labels, 0.5)
-        self._surrogate.train(self._database, labels, pair_seed)
-        self.assertTrue(self._surrogate.match(r0, r3, 'strong')[0])
-        self.assertTrue(self._surrogate.match(r1, r3, 'strong')[0])
-        self.assertFalse(self._surrogate.match(r0, r1, 'strong')[0])
-        self.assertFalse(self._surrogate.match(r0, r2, 'strong')[0])
-        self.assertFalse(self._surrogate.match(r1, r2, 'strong')[0])
-        self.assertFalse(self._surrogate.match(r2, r3, 'strong')[0])
-        self.assertTrue(self._surrogate.match(r0, deepcopy(r0), 'exact')[0])
-        self.assertTrue(self._surrogate.match(r1, deepcopy(r1), 'exact')[0])
-        self.assertTrue(self._surrogate.match(r2, deepcopy(r2), 'exact')[0])
-        self.assertTrue(self._surrogate.match(r3, deepcopy(r3), 'exact')[0])
+        self._match_function._train(self._database, labels, pair_seed)
+        self.assertTrue(self._match_function.match(r0, deepcopy(r0))[0])
+        self.assertTrue(self._match_function.match(r1, deepcopy(r1))[0])
+        self.assertTrue(self._match_function.match(r2, deepcopy(r2))[0])
+        self.assertTrue(self._match_function.match(r3, deepcopy(r3))[0])
 
     def test_test(self):
         database = Database('test_annotations_10000_cleaned.csv')
@@ -66,10 +63,9 @@ class MyTestCase(unittest.TestCase):
         database_test = database
         labels_train = fast_strong_cluster(database_train)
         labels_test = fast_strong_cluster(database_test)
-        surrogate = SurrogateMatchFunction(0.99)
-        pair_seed = generate_pair_seed(database_train, labels_train, 0.5)
-        surrogate.train(database_train, labels_train, pair_seed)
-        roc = surrogate.test(database_test, labels_test, 0.5)
+        train_seed = generate_pair_seed(database_train, labels_train, 0.5)
+        match_function = LogisticMatchFunction(database_train, labels_train, train_seed, 0.7)
+        roc = match_function.test(database_test, labels_test, 0.5)
         roc.make_plot()
 
     def test_get_x1(self):
@@ -77,16 +73,16 @@ class MyTestCase(unittest.TestCase):
         r1 = self._database.records[1]
         r2 = self._database.records[2]
         r3 = self._database.records[3]
-        self.assertEqual(get_x1(r0, r3), True)
-        self.assertEqual(get_x1(r1, r3), True)
-        self.assertEqual(get_x1(r0, r1), False)
-        self.assertEqual(get_x1(r0, r2), False)
-        self.assertEqual(get_x1(r1, r2), False)
-        self.assertEqual(get_x1(r2, r3), False)
+        self.assertEqual(strong_match(r0, r3), True)
+        self.assertEqual(strong_match(r1, r3), True)
+        self.assertEqual(strong_match(r0, r1), False)
+        self.assertEqual(strong_match(r0, r2), False)
+        self.assertEqual(strong_match(r1, r2), False)
+        self.assertEqual(strong_match(r2, r3), False)
 
     def test_get_x2(self):
         r0 = self._database.records[0]
-        x2 = get_x2(r0, r0)
+        x2 = get_weak_pairwise_features(r0, r0)
         self.assertEqual(x2[0], 0) # [1], binary match
         self.assertEqual(x2[1], 0) # [2], date diff
         self.assertEqual(x2[2], 0) # [3], bin

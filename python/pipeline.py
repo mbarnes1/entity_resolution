@@ -1,30 +1,48 @@
 from database import Database
-from entityresolution import EntityResolution
+from entityresolution import EntityResolution, fast_strong_cluster
+from logistic_match import LogisticMatchFunction
+from pairwise_features import generate_pair_seed
 from metrics import Metrics
+from new_metrics import NewMetrics, count_pairwise_class_balance
+from copy import deepcopy
 __author__ = 'mbarnes'
 
 
 def main():
     regex_path = 'test/test_annotations_10000.csv'
-    train_size = 500
-    test_size = 500
-    balancing = True
-    max_block_size = 100
-    match_type = 'weak_strong'
+    train_size = 6000
+    validation_size = 2000
     decision_threshold = 0.9
-    db = Database(regex_path, max_records=1000)
-    db_training = db.sample_and_remove(train_size)
-    db_testing = db
+    train_class_balance = 0.5
+    max_block_size = 10000
+    cores = 2
+
+    database = Database(regex_path)
+    database_train = database.sample_and_remove(train_size)
+    database_validation = database.sample_and_remove(validation_size)
+    database_test = database
+
+    labels_train = fast_strong_cluster(database_train)
+    labels_validation = fast_strong_cluster(database_validation)
+
+
+    train_seed = generate_pair_seed(database_train, labels_train, train_class_balance)
+    match_function = LogisticMatchFunction(database_train, labels_train, train_seed, decision_threshold)
+    match_roc = match_function.test(database_validation, labels_validation, 0.5)
+
+
+    strong_labels = fast_strong_cluster(database_test)
+    database_test.merge(strong_labels)
+
     er = EntityResolution()
-    labels_train = fast_strong_cluster(db_training)
-    labels_test = fast_strong_cluster(db_testing)
-    weak_match_function = er.train(db_training, labels_train, balancing)
-    labels_pred = er.run(db_testing, weak_match_function, decision_threshold, match_type, max_block_size)
-    metrics = Metrics(labels_test, labels_pred)
+    weak_labels = er.run(deepcopy(database_test), match_function, max_block_size=max_block_size, cores=cores)
+    database_test.merge(weak_labels)
+
+    print 'Metrics using strong features as surrogate label. Entity resolution run using weak and strong features'
+    metrics = Metrics(strong_labels, weak_labels)
     _print_metrics(metrics)
-    #metrics.display()
-    roc = weak_match_function.test(db_testing, labels_test, test_size)
-    #roc.make_plot()
+    estimated_test_class_balance = count_pairwise_class_balance(strong_labels)
+    new_metrics = NewMetrics(database_test, match_function, estimated_test_class_balance)
 
 
 def _print_metrics(metrics):
@@ -50,64 +68,6 @@ def _print_metrics(metrics):
     print 'Variation of Information:', metrics.variation_of_information, '\n'
     print 'Purity:', metrics.purity
 
-
-def fast_strong_cluster(database):
-    """
-    Merges records with any strong features in common. Used as surrogate ground truth in CHT application
-    Equivalent to running Swoosh using only strong matches, except much faster because of explicit graph exploration
-    :param database: Database object
-    :return labels: Cluster labels in the form of a dictionary [identifier, cluster_label]
-    """
-    strong2index = dict()  # [swoosh index, set of ad indices]  node --> edges
-    index2strong = dict()  # [ad index, list of swoosh indices]  edge --> nodes (note an edge can lead to multiple nodes)
-    cluster_counter = 0
-    cluster_labels = dict()
-    for _, record in database.records.iteritems():
-        indices = record.line_indices
-        strong_features = record.get_features('strong')
-        if not strong_features:  # no strong features, insert singular entity
-            for identifier in indices:
-                cluster_labels[identifier] = cluster_counter
-            cluster_counter += 1
-        for strong in strong_features:
-            if strong in strong2index:
-                strong2index[strong].extend(list(indices))
-            else:
-                strong2index[strong] = list(indices)
-            for index in indices:
-                if index in index2strong:
-                    index2strong[index].append(strong)
-                else:
-                    index2strong[index] = [strong]
-
-    # Determine connected components
-    explored_strong = set()  # swooshed records already explored
-    explored_indices = set()
-    to_explore = list()  # ads to explore
-    for index, strong_features in index2strong.iteritems():
-        if index not in explored_indices:
-            explored_indices.add(index)
-            cc = set()
-            cc.add(index)
-            to_explore.extend(list(strong_features))
-            while to_explore:
-                strong = to_explore.pop()
-                if strong not in explored_strong:
-                    explored_strong.add(strong)
-                    connected_indices = strong2index[strong]
-                    for connected_index in connected_indices:
-                        if connected_index not in explored_indices:
-                            cc.add(connected_index)
-                            explored_indices.add(connected_index)
-                            to_explore.extend(list(index2strong[connected_index]))
-
-            # Found complete connected component, save labels
-            for c in cc:
-                record = database.records[c]
-                for identifier in record.line_indices:
-                    cluster_labels[identifier] = cluster_counter
-            cluster_counter += 1
-    return cluster_labels
 
 if __name__ == '__main__':
     main()

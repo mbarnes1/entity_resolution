@@ -1,5 +1,5 @@
 """
-This is the blocking scheme used to make Entity Resolution computationally feasible.
+This is the blocking scheme used to make Entity Resolution computationally scalable.
 """
 import numpy as np
 from itertools import izip
@@ -25,7 +25,6 @@ class BlockingScheme(object):
             self._max_block_size = np.Inf
             self.weak_blocks['All'] = set(database.records.keys())
 
-    # Inserts ads that were not blocked or whose block was thrown away
     def _complete_blocks(self, keys):
         """
         Finds ads missing from blocking scheme (due to sparse features), and ads them as single ads to weak blocks
