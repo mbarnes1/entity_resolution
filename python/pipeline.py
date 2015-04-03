@@ -1,72 +1,73 @@
-from database import Database
-from entityresolution import EntityResolution, fast_strong_cluster
+from database import Database, SyntheticDatabase
+from entityresolution import EntityResolution, fast_strong_cluster, weak_connected_components
 from logistic_match import LogisticMatchFunction
+from decision_tree_match import TreeMatchFunction
+from blocking import BlockingScheme
 from pairwise_features import generate_pair_seed
 from metrics import Metrics
 from new_metrics import NewMetrics, count_pairwise_class_balance
 from copy import deepcopy
+import numpy as np
 __author__ = 'mbarnes'
 
 
 def main():
-    regex_path = 'test/test_annotations_10000.csv'
-    train_size = 6000
-    validation_size = 2000
-    decision_threshold = 0.9
+    type = 'synthetic'  # synthetic or real
+    train_size = 500
+    validation_size = 250
+    decision_threshold = 0.999
     train_class_balance = 0.5
-    max_block_size = 10000
+    max_block_size = 1000
     cores = 2
 
-    database = Database(regex_path)
+    if type == 'synthetic':
+        database = SyntheticDatabase(100, 10, 10)
+        corruption = 0.1
+        corruption_array = corruption*np.random.normal(loc=0.0, scale=1.0, size=[1000,
+                                                       database.database.feature_descriptor.number])
+        database.corrupt(corruption_array)
+    else:
+        regex_path = 'test/test_annotations_10000_cleaned.csv'
+        database = Database(regex_path, max_records=1000)
+
     database_train = database.sample_and_remove(train_size)
     database_validation = database.sample_and_remove(validation_size)
     database_test = database
 
-    labels_train = fast_strong_cluster(database_train)
-    labels_validation = fast_strong_cluster(database_validation)
+    if type == 'synthetic':
+        labels_train = database_train.labels
+        labels_validation = database_validation.labels
+        labels_test = database_test.labels
+        database_train = database_train.database
+        database_validation = database_validation.database
+        database_test = database_test.database
+    else:
+        labels_train = fast_strong_cluster(database_train)
+        labels_validation = fast_strong_cluster(database_validation)
+        labels_test = fast_strong_cluster(database_test)
 
+    entities = deepcopy(database_test)
+    blocking_scheme = BlockingScheme(entities, max_block_size, single_block=False)
 
     train_seed = generate_pair_seed(database_train, labels_train, train_class_balance)
     match_function = LogisticMatchFunction(database_train, labels_train, train_seed, decision_threshold)
-    match_roc = match_function.test(database_validation, labels_validation, 0.5)
+    match_function.test(database_validation, labels_validation, 0.5)
+    match_function.roc.make_plot()
 
 
-    strong_labels = fast_strong_cluster(database_test)
-    database_test.merge(strong_labels)
+    #entities.merge(strong_labels)
 
-    er = EntityResolution()
-    weak_labels = er.run(deepcopy(database_test), match_function, max_block_size=max_block_size, cores=cores)
-    database_test.merge(weak_labels)
+    #er = EntityResolution()
+    #weak_labels = er.run(entities, match_function, blocking_scheme, cores=cores)
+    weak_labels = weak_connected_components(entities, match_function, blocking_scheme)
+    entities.merge(weak_labels)
 
     print 'Metrics using strong features as surrogate label. Entity resolution run using weak and strong features'
-    metrics = Metrics(strong_labels, weak_labels)
-    _print_metrics(metrics)
-    estimated_test_class_balance = count_pairwise_class_balance(strong_labels)
-    new_metrics = NewMetrics(database_test, match_function, estimated_test_class_balance)
-
-
-def _print_metrics(metrics):
-    """
-    Prints metrics to console
-    :param metrics: Metrics object
-    """
-    print 'Pairwise precision:', metrics.pairwise_precision
-    print 'Pairwise recall:', metrics.pairwise_recall
-    print 'Pairwise F1:', metrics.pairwise_f1, '\n'
-    print 'Cluster precision:', metrics.cluster_precision
-    print 'Cluster recall:', metrics.cluster_recall
-    print 'Cluster F1:', metrics.cluster_f1, '\n'
-    print 'Closest cluster preicision:', metrics.closest_cluster_precision
-    print 'Closest cluster recall:', metrics.closest_cluster_recall
-    print 'Closest cluster F1:', metrics.closest_cluster_f1, '\n'
-    print 'Average cluster purity:', metrics.acp
-    print 'Average author purity:', metrics.aap
-    print 'K:', metrics.k, '\n'
-    print 'Homogeneity:', metrics.homogeneity
-    print 'Completeness:', metrics.completeness
-    print 'V-Measure:', metrics.vmeasure, '\n'
-    print 'Variation of Information:', metrics.variation_of_information, '\n'
-    print 'Purity:', metrics.purity
+    metrics = Metrics(labels_test, weak_labels)
+    estimated_test_class_balance = count_pairwise_class_balance(labels_test)
+    new_metrics = NewMetrics(database_test, weak_labels, match_function, estimated_test_class_balance)
+    metrics.display()
+    new_metrics.display()
 
 
 if __name__ == '__main__':

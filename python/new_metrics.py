@@ -1,5 +1,4 @@
 from itertools import combinations
-from bisect import bisect, bisect_left
 __author__ = 'mbarnes1'
 
 
@@ -19,21 +18,19 @@ class NewMetrics(object):
         self.match_function = match_function
         self.recall_lower_bound, self.recall_lower_bound_lower_ci, self.recall_lower_bound_upper_ci = self._pairwise_recall_lower_bound()
         self.precision_lower_bound, self.precision_lower_bound_lower_ci, self.precision_lower_bound_upper_ci, self.TP_FP_match, self.TP_FP_swoosh = self._pairwise_precision_lower_bound(database, labels)
-        self.f1_lower_bound = 2*self.precision_lower_bound*self.recall_lower_bound/(self.precision_lower_bound + self.recall_lower_bound)
+        self.f1_lower_bound = 2*self.precision_lower_bound*self.recall_lower_bound/(self.precision_lower_bound + self.recall_lower_bound) \
+            if self.precision_lower_bound and self.recall_lower_bound else 0.0
         print 'new metric evaluated.'
 
     def _pairwise_recall_lower_bound(self):
         """
         Lower bounds the pairwise recall
         :return recall_lower_bound:
+        :return recall_lower_bound_lower_ci: Recall 95% lower bound
+        :return recall_lower_bound_upper_ci: Recall 95% upper bound
         """
-        threshold = self.match_function.get_decision_threshold()
-        print 'Lower bounding pairwise recall at threshold', threshold
-        index = bisect_left(self.match_function.roc.prob, threshold)  # first occurence of this threshold
-        print 'Validation set match recall', self.match_function.roc.recall[index]
-        recall_lower_bound = self.match_function.roc.recall[index]
-        recall_lower_bound_lower_ci = self.match_function.roc.recall_lower_ci[index]
-        recall_lower_bound_upper_ci = self.match_function.roc.recall_upper_ci[index]
+        print 'Lower bounding pairwise recall'
+        recall_lower_bound, recall_lower_bound_lower_ci, recall_lower_bound_upper_ci = self.match_function.get_recall()
         return recall_lower_bound, recall_lower_bound_lower_ci, recall_lower_bound_upper_ci
 
     def _pairwise_precision_lower_bound(self, database, labels):
@@ -49,20 +46,8 @@ class NewMetrics(object):
                 cluster_to_records[cluster_id].add(record_id)
             else:
                 cluster_to_records[cluster_id] = {record_id}
-        threshold = self.match_function.get_decision_threshold()
-
-        print 'Lower bounding pairwise precision at threshold', threshold
-        index = bisect(self.match_function.roc.prob, threshold) - 1  # first occurence of this threshold
-        if index >= 0:
-            match_precision_validation = self.match_function.roc.precision[index]
-            match_precision_validation_upper_ci = self.match_function.roc.precision_upper_ci[index]
-            match_precision_validation_lower_ci = self.match_function.roc.precision_lower_ci[index]
-        elif index == -1:
-            match_precision_validation = self.match_function.roc.precision[0]
-            match_precision_validation_upper_ci = self.match_function.roc.precision_upper_ci[0]
-            match_precision_validation_lower_ci = self.match_function.roc.precision_lower_ci[0]
-        else:
-            raise IndexError
+        print 'Lower bounding pairwise precision at threshold'
+        match_precision_validation, match_precision_validation_lower_ci, match_precision_validation_upper_ci = self.match_function.get_precision()
         print '     Validation set match precision =', match_precision_validation
         class_balance_validation = self.match_function.roc.class_balance
         print '     Rebalancing precision for validation class balance', class_balance_validation
@@ -100,6 +85,14 @@ class NewMetrics(object):
         print '     Precision lower bound:', precision_lower_bound
         return precision_lower_bound, precision_lower_bound_lower_ci, precision_lower_bound_upper_ci, \
                total_match_pairs, total_swoosh_pairs
+
+    def display(self):
+        print 'Pairwise precision lower bound:', self.precision_lower_bound, ''
+        print '     (Lower confidence:', self.precision_lower_bound_lower_ci, ')'
+        print '     (Upper confidence:', self.precision_lower_bound_upper_ci, ')\n'
+        print 'Pairwise recall lower bound:', self.recall_lower_bound, ''
+        print '     (Lower confidence:', self.recall_lower_bound_lower_ci, ')'
+        print '     (Upper confidence:', self.recall_lower_bound_upper_ci, ')'
 
 
 def rebalance_recall(recall_1, class_balance_1, class_balance_2):

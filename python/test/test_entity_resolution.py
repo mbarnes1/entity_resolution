@@ -16,7 +16,7 @@ class MyTestCase(unittest.TestCase):
         self._test_path = 'test_annotations_cleaned.csv'
         self._database = Database(self._test_path)
         self._labels = fast_strong_cluster(self._database)
-        self._blocking = BlockingScheme(self._database)
+        self._blocking = BlockingScheme(self._database, single_block=True)
         self._er = EntityResolution()
         decision_threshold = 1.0
         pair_seed = generate_pair_seed(self._database, self._labels, 0.5)
@@ -26,7 +26,12 @@ class MyTestCase(unittest.TestCase):
         strong_clusters = fast_strong_cluster(self._database)
         database_copy = deepcopy(self._database)
         database_copy.merge(strong_clusters)
-        self._er.run(database_copy, self._match_function, cores=2)
+        blocking = BlockingScheme(database_copy, single_block=True)
+        labels = self._er.run(database_copy, self._match_function, blocking, cores=2)
+        database_copy.merge(labels)
+        entities = set()
+        for _, entity in database_copy.records.iteritems():
+            entities.add(entity)
         r0 = self._database.records[0]
         r1 = self._database.records[1]
         r2 = self._database.records[2]
@@ -34,7 +39,7 @@ class MyTestCase(unittest.TestCase):
         r0.merge(r1)
         r0.merge(r3)
         manual = {r0, r2}
-        self.assertTrue(test_object_set(manual, set(self._er.entities)))
+        self.assertTrue(test_object_set(manual, entities))
 
     def test_rswoosh(self):
         strong_clusters = fast_strong_cluster(self._database)
@@ -99,14 +104,15 @@ class MyTestCase(unittest.TestCase):
         er = EntityResolution()
         pair_seed = generate_pair_seed(database_train, labels_train, 0.5)
         match_function = LogisticMatchFunction(database_train, labels_train, pair_seed, 0.99)
-        labels_pred = er.run(database_test, match_function, cores=2)
+        blocking_scheme = BlockingScheme(database_test)
+        labels_pred = er.run(database_test, match_function, blocking_scheme, cores=2)
         number_fast_strong_records = len(labels_train) + len(labels_test)
         self.assertEqual(number_fast_strong_records, 1000)
         self.assertEqual(sorted((labels_train.keys() + labels_test.keys())), range(0, 1000))
-        number_swoosh_records = len(get_ids(er.entities))
+        number_swoosh_records = len(get_ids(database_test.records))
         self.assertEqual(number_swoosh_records, len(database_test.records))
-        self.assertEqual(get_ids(er.entities), sorted(labels_test.keys()))
-        self.assertEqual(get_ids(er.entities), sorted(labels_pred.keys()))
+        self.assertEqual(get_ids(database_test.records), sorted(labels_test.keys()))
+        self.assertEqual(get_ids(database_test.records), sorted(labels_pred.keys()))
 
     def test_fast_strong_cluster(self):
         labels_pred = fast_strong_cluster(self._database)
@@ -130,12 +136,12 @@ class MyTestCase(unittest.TestCase):
 
 def get_ids(records):
     """
-    Returns a sorted list of all the ids in an iterable of records, in ascending order
+    Returns a sorted list of all the ids in a dictionary of records, in ascending order
     :param records: Iterable of record objects
     :return ids: List of all original record identifiers
     """
     ids = []
-    for r in records:
+    for _, r in records.iteritems():
         for identifier in r.line_indices:
             ids.append(identifier)
     ids.sort()

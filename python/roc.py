@@ -2,6 +2,7 @@ __author__ = 'mbarnes1'
 import numpy as np
 from itertools import izip
 from sklearn.metrics import auc
+from bisect import bisect, bisect_left
 from copy import copy
 
 
@@ -59,8 +60,66 @@ class RocCurve(object):
         for prob, fpr, tpr in izip(self.prob, self.fpr, self.tpr):
             print "{:10.4f}, {:10.4f}, {:10.4f}".format(prob, fpr, tpr)
 
-    # Write tpr and fpr to a flat file
+    def get_recall(self, threshold):
+        """
+        Returns the recall at the specified threshold
+        :param threshold:
+        :return recall:
+        :return recall_lower_ci: 95% lower confidence interval, based on Wilson score
+        :return recall_upper_ci: 95% upper confidence interval, based on Wilson score
+        """
+        if 0.0 <= threshold <= 1.0:
+            index = bisect_left(self.prob, min(1.0, threshold))  # first occurence of this threshold
+            recall = self.recall[index]
+            recall_lower_ci = self.recall_lower_ci[index]
+            recall_upper_ci = self.recall_upper_ci[index]
+        elif threshold > 1.0:
+            recall = 0.0
+            recall_lower_ci = 0.0
+            recall_upper_ci = 0.0
+        else:
+            recall = 1.0
+            recall_lower_ci = 1.0
+            recall_upper_ci = 1.0
+        print 'Validation set match recall', recall
+        return recall, recall_lower_ci, recall_upper_ci
+
+    def get_precision(self, threshold):
+        """
+        Returns the precision at the specified threshold
+        :param threshold:
+        :return precision:
+        :return precision_lower_ci: Precision 95% lower bound
+        :return precision_upper_ci: Precision 95% upper bound
+        """
+        if 0.0 <= threshold <= 1.0:
+            index = bisect(self.prob, min(1.0, threshold)) - 1  # first occurence of this threshold
+            if index >= 0:
+                precision = self.precision[index]
+                precision_upper_ci = self.precision_upper_ci[index]
+                precision_lower_ci = self.precision_lower_ci[index]
+            elif index == -1:
+                precision = self.precision[0]
+                precision_upper_ci = self.precision_upper_ci[0]
+                precision_lower_ci = self.precision_lower_ci[0]
+            else:
+                raise IndexError
+        elif threshold > 1.0:
+            precision = 1.0
+            precision_lower_ci = 1.0
+            precision_upper_ci = 1.0
+        else:
+            precision = 0.0
+            precision_lower_ci = 0.0
+            precision_upper_ci = 0.0
+
+        return precision, precision_lower_ci, precision_upper_ci
+
     def write(self, path):
+        """
+        Write TPR and FPR to a flat file
+        :param path: File path to write
+        """
         rates = np.column_stack((self.tpr, self.fpr))
         np.savetxt(path, rates, delimiter=",", header='tpr,fpr')
 

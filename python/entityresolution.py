@@ -1,12 +1,12 @@
 from __future__ import division
 import cPickle as pickle  # for saving and loading shit, fast
-import numpy as np
 import multiprocessing
-from blocking import BlockingScheme
 from pairwise_features import get_weak_pairwise_features
 import gc
 import traceback
 import os
+from itertools import permutations
+import networkx
 __author__ = 'mbarnes1'
 
 
@@ -48,22 +48,20 @@ class EntityResolution(object):
             print 'Worker exiting'
 
     def __init__(self):
-        self.blocking = None
-        self.entities = list()
+        print 'Entity resolution initialized'
 
-    def run(self, database_test, match_function, max_block_size=np.Inf, single_block=False, cores=1):
+    def run(self, database_test, match_function, blocking_scheme, cores=1):
         """
         This function performs Entity Resolution on all the blocks and merges results to output entities
         :param database_test: Database object to run on. Will modify in place.
         :param match_function: Handle to surrogate match function object. Must have field decision_threshold and
                                function match(r1, r2, match_type)
-        :param max_block_size: Blocks larger than this are thrown away
-        :param single_block: If True, puts all records into single large weak block (only OK for small databases)
+        :param blocking_scheme: BlockingScheme object
         :param cores: The number of processes (i.e. workers) to use
         :return identifier_to_cluster: Predicted labels, of dictionary form [identifier, cluster label]
         """
-        if type(max_block_size) is not int and max_block_size is not np.Inf:
-            raise TypeError('Max block size must be of type int')
+        if match_function.ICAR is False:
+            raise Exception('Match function must satsify ICAR properties for R-Swoosh')
         self._match_function = match_function
         # Multiprocessing code
         if cores > 1:  # large job, use memory bufffer
@@ -77,7 +75,6 @@ class EntityResolution(object):
             w = self.Worker(self, job_queue, results_queue)
             workerpool.append(w)
         #self._init_large_files()  # initialize large files after creating workers to reduce memory usage by processes
-        self.blocking = BlockingScheme(database_test, max_block_size, single_block=single_block)
 
         memory_buffer = 0  # so nothing points to memory buffer file
         if cores > 1:
@@ -87,12 +84,12 @@ class EntityResolution(object):
         records = database_test.records
 
         # Create block jobs for workers
-        for blockname, indices in self.blocking.strong_blocks.iteritems():
+        for blockname, indices in blocking_scheme.strong_blocks.iteritems():
             index_block = set()
             for identifier in indices:
                 index_block.add(records[identifier])
             job_queue.put(index_block)
-        for blockname, indices in self.blocking.weak_blocks.iteritems():
+        for blockname, indices in blocking_scheme.weak_blocks.iteritems():
             index_block = set()
             for identifier in indices:
                 index_block.add(records[identifier])
@@ -102,10 +99,10 @@ class EntityResolution(object):
 
         # Capture the results
         results_list = list()
-        while len(results_list) < self.blocking.number_of_blocks():
+        while len(results_list) < blocking_scheme.number_of_blocks():
             results = results_queue.get()
             results_list.append(results)
-            print 'Finished', len(results_list), 'of', self.blocking.number_of_blocks()
+            print 'Finished', len(results_list), 'of', blocking_scheme.number_of_blocks()
         print 'Joining workers'
         for worker in workerpool:
             worker.join()
@@ -152,9 +149,9 @@ class EntityResolution(object):
                 counter += 1
         """
         print 'Merging entities...'
-        self.entities = merge_duped_records(swoosheddict)
+        entities = merge_duped_records(swoosheddict)
         identifier_to_cluster = dict()
-        for cluster_index, entity in enumerate(self.entities):
+        for cluster_index, entity in enumerate(entities):
             for identifier in entity.line_indices:
                 identifier_to_cluster[identifier] = cluster_index
         print 'entities merged.'
@@ -299,3 +296,41 @@ def fast_strong_cluster(database):
                     cluster_labels[identifier] = cluster_counter
             cluster_counter += 1
     return cluster_labels
+
+
+def weak_connected_components(database, match_function, blocking_scheme):
+    """
+    Match and merge function operating on sets of records is equivalent to connected components.
+    Direct implementation of this graphical approach.
+    :param database: Database object to run ER on
+    :param match_function: The trained match function
+    :param blocking_scheme: BlockingScheme object
+    :return identifier_to_cluster: Predicted labels, of dictionary form [record id, cluster label]:
+    """
+    print 'Finding weakly connected components'
+    pairs = set()
+    for block_name, records in blocking_scheme.strong_blocks.iteritems():
+        for pair in permutations(records, 2):
+            pairs.add(pair)
+    for block_name, records in blocking_scheme.weak_blocks.iteritems():
+        for pair in permutations(records, 2):
+            pairs.add(pair)
+    sparse_adjacency_matrix = list()  # symmetric, only stores lower triangular portion (i.e. pair(0)<pair(1))
+    print 'Total number of pairs in blocking scheme to evaluate:', len(sparse_adjacency_matrix)
+    for pair in pairs:
+        if pair[0] < pair[1]:
+            r1 = database.records[pair[0]]
+            r2 = database.records[pair[1]]
+            if match_function.match(r1, r2):
+                sparse_adjacency_matrix.append(pair)
+    # Add singleton entities
+    for record_id, _ in database.records.iteritems():
+        pair = (record_id, record_id)
+        sparse_adjacency_matrix.append(pair)
+    graph = networkx.Graph(sparse_adjacency_matrix)
+    connected_components = networkx.connected_components(graph)
+    identifier_to_cluster = dict()
+    for cluster_label, component in enumerate(connected_components):
+        for record_id in component:
+            identifier_to_cluster[record_id] = cluster_label
+    return identifier_to_cluster

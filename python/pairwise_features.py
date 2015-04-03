@@ -106,9 +106,9 @@ def generate_pair_seed(database, labels, class_balance):
                     print 'successful.'
                 else:
                     pair = None
-        database.records[pair[0]].display(indent='              ')
-        print '               ----'
-        database.records[pair[1]].display(indent='              ')
+        #database.records[pair[0]].display(indent='              ')
+        #print '               ----'
+        #database.records[pair[1]].display(indent='              ')
         print '         Number of pairs within:', within_cluster_pairs, '   between:', between_cluster_pairs
     pairs = list(pairs)
     print 'Finished generating pair seed.'
@@ -123,31 +123,30 @@ def get_pairwise_features(database, labels_train, pair_seed):
     Can balance classes, using labels_train
     :param database: Database object to sample from
     :param labels_train: Cluster labels of the dictionary form [identifier, cluster label]
-    :param number_samples: Number of samples to return
     :param pair_seed: Pairs to use.
-    :return x1: Vector of strong features, values takes either 0 or 1
-    :return x2: n x m Matrix of weak features, where n is number_samples and m is number of weak features
+    :return y: Vector of labels, values takes either 0 or 1
+    :return x: n x m Matrix of weak features, where n is number_samples and m is number of weak features
     :return m: Mean imputation vector of weak features, 1 x number of weak features
     """
     pairs = pair_seed  # use all of the pair seed
-    x1 = list()
-    x2 = list()
+    y = list()
+    x = list()
     for pair in pairs:
         r1 = database.records[pair[0]]
         r2 = database.records[pair[1]]
         c1 = labels_train[next(iter(r1.line_indices))]  # cluster r1 belongs to
         c2 = labels_train[next(iter(r2.line_indices))]  # cluster r2 belongs to
         _x1 = int(c1 == c2)
-        x1.append(_x1)
+        y.append(_x1)
         if database._precomputed_x2:
             _x2 = get_precomputed_x2(database._precomputed_x2, r1, r2)
         else:
             _x2 = get_weak_pairwise_features(r1, r2)
-        x2.append(_x2)
-    x1 = np.asarray(x1)
-    x2 = np.asarray(x2)
-    m = mean_imputation(x2)
-    return x1, x2, m
+        x.append(_x2)
+    y = np.asarray(y)
+    x = np.asarray(x)
+    m = mean_imputation(x)
+    return y, x, m
 
 
 def get_weak_pairwise_features(r1, r2):

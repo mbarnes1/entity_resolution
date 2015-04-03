@@ -34,6 +34,14 @@ class Metrics(object):
         self._entity_sizes_true = _get_entity_sizes(self._clusters_true)
         print 'metrics evaluated.'
 
+    def get_clusters(self):
+        """
+        Returns the true and predicted clusters, as a frozen set of frozen set of record ids
+        :return clusters_pred: Predicted clusters
+        :return clusters_true: True clusters
+        """
+        return self._clusters_pred, self._clusters_true
+
     def _pairwise_precision_recall_f1(self):
         """
         Pairwise precision, pairwise recall, pairwise F1
@@ -194,28 +202,29 @@ class Metrics(object):
 
     def display(self):
         """
-        Make weak feature classifier ROC curve, strong entity sizes, entity sizes, and block sizes figures
-        Tries to catch error for when running on server, but it does not work
+        Prints metrics to console
         """
-        try:
-            import matplotlib.pyplot as plt
-            make_plots = True
-        except ImportError or RuntimeError:
-            make_plots = False
-        if make_plots:
-            ## True Entity Sizes
-            plt.plot(self._entity_sizes_true[:, 0], self._entity_sizes_true[:, 1], 'ro')
-            plt.xlabel('Number of ads in entity')
-            plt.ylabel('Occurences')
-            plt.title('True Entity Sizes')
-            plt.show()
-
-            ## Predicted Entity Sizes
-            plt.plot(self._entity_sizes_pred[:, 0], self._entity_sizes_pred[:, 1], 'ro')
-            plt.xlabel('Number of ads in entity')
-            plt.ylabel('Occurences')
-            plt.title('Predicted Entity Sizes')
-            plt.show()
+        print 'Number of true clusters:', len(self._clusters_true)
+        print 'Number of predicted clusters:', len(self._clusters_pred)
+        print 'Largest true cluster:', max([len(x) for x in self._clusters_true])
+        print 'Largest predicted cluster:', max([len(x) for x in self._clusters_pred]), '\n'
+        print 'Pairwise precision:', self.pairwise_precision
+        print 'Pairwise recall:', self.pairwise_recall
+        print 'Pairwise F1:', self.pairwise_f1, '\n'
+        print 'Cluster precision:', self.cluster_precision
+        print 'Cluster recall:', self.cluster_recall
+        print 'Cluster F1:', self.cluster_f1, '\n'
+        print 'Closest cluster preicision:', self.closest_cluster_precision
+        print 'Closest cluster recall:', self.closest_cluster_recall
+        print 'Closest cluster F1:', self.closest_cluster_f1, '\n'
+        print 'Average cluster purity:', self.acp
+        print 'Average author purity:', self.aap
+        print 'K:', self.k, '\n'
+        print 'Homogeneity:', self.homogeneity
+        print 'Completeness:', self.completeness
+        print 'V-Measure:', self.vmeasure, '\n'
+        print 'Variation of Information:', self.variation_of_information, '\n'
+        print 'Purity:', self.purity, '\n'
 
 
 def _linearize(labels_a, labels_b):
@@ -227,9 +236,9 @@ def _linearize(labels_a, labels_b):
     """
     linear_a = list()
     linear_b = list()
-    for id, cluster in labels_a.iteritems():
+    for identifier, cluster in labels_a.iteritems():
         linear_a.append(cluster)
-        linear_b.append(labels_b[id])
+        linear_b.append(labels_b[identifier])
     return linear_a, linear_b
 
 
@@ -239,11 +248,11 @@ def _cluster(labels):
     :return clusters: Frozen set of clusters. Each cluster is a frozen set of record ids
     """
     cluster_to_record = dict()
-    for id, cluster in labels.iteritems():
+    for identifier, cluster in labels.iteritems():
         if cluster in cluster_to_record:
-            cluster_to_record[cluster].append(id)
+            cluster_to_record[cluster].append(identifier)
         else:
-            cluster_to_record[cluster] = [id]
+            cluster_to_record[cluster] = [identifier]
     ## Convert to frozen sets
     clusters = set()
     for _, ads in cluster_to_record.iteritems():

@@ -3,7 +3,6 @@ import datetime
 from itertools import izip  # Uses iterator instead of list (less memory)
 
 
-# A single record, i.e. ad or merge of ads
 class Record(object):
     """
     This object represents a single ad or entity.

@@ -205,10 +205,12 @@ class Database(object):
             else:
                 cluster_to_records[cluster_id] = [record_id]
         for _, record_ids in cluster_to_records.iteritems():
-            merged_record = self.records[record_ids[0]]
-            for record_id in record_ids[1:]:
-                record = self.records.pop(record_id)
-                merged_record.merge(record)
+            merged_record = None
+            for record_id in record_ids:
+                if record_id in self.records and merged_record is None:
+                    merged_record = self.records[record_id]
+                elif record_id in self.records:
+                    merged_record.merge(self.records.pop(record_id))
 
     def dump(self, out_file):
         """
