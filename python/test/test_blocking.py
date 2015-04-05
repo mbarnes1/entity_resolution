@@ -24,7 +24,7 @@ class MyTestCase(unittest.TestCase):
         self.assertRaises(KeyError, lambda: self._blocks.strong_blocks['poster_0000001'])
 
     def test_completeness_10000(self):
-        database = Database('test_annotations_10000_cleaned.csv')
+        database = Database('test_annotations_10000_cleaned.csv', header_path='test_annotations_10000_cleaned_header.csv')
         blocks = BlockingScheme(database, max_block_size=200)
         used_ads = get_records(blocks)
         self.assertEqual(used_ads, range(0, len(database.records)))
