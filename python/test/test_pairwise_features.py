@@ -20,7 +20,7 @@ class MyTestCase(unittest.TestCase):
         self._match_function = LogisticMatchFunction(self._database, labels, pair_seed, 0.5)
 
     def test_pairs(self):
-        database = Database('test_annotations_10000_cleaned.csv')
+        database = Database('test_annotations_10000_cleaned.csv', header_path='test_annotations_10000_cleaned_header.csv')
         labels = fast_strong_cluster(database)
         pair_seed = generate_pair_seed(database, labels, 0.5)
         # x1_a, x2_a, m_a = _get_pairs(database, labels, 10, balancing=True)
@@ -58,7 +58,7 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(self._match_function.match(r3, deepcopy(r3))[0])
 
     def test_test(self):
-        database = Database('test_annotations_10000_cleaned.csv')
+        database = Database('test_annotations_10000_cleaned.csv', header_path='test_annotations_10000_cleaned_header.csv')
         database_train = database.sample_and_remove(5000)
         database_test = database
         labels_train = fast_strong_cluster(database_train)

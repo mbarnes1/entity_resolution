@@ -10,9 +10,10 @@ import cProfile
 
 def main():
     path = '../test/test_annotations_10000_cleaned.csv'
+    header_path = '../test/test_annotations_10000_cleaned_header.csv'
     out = open('../strong_clusters.csv', 'w')
     out.write('line_index, poster_id, cluster_id\n')
-    database = Database(path)
+    database = Database(path, header_path=header_path)
     strong_clusters = fast_strong_cluster(database)
     line_indices = strong_clusters.keys()
     line_indices.sort()

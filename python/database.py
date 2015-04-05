@@ -146,9 +146,10 @@ class Database(object):
     
     where M is the number of ads and N is the number of features
     """
-    def __init__(self, annotation_path=None, max_records=np.Inf, precomputed_x2=None):
+    def __init__(self, annotation_path=None, header_path=None, max_records=np.Inf, precomputed_x2=None):
         """
         :param annotation_path: String, path to annotation file
+        :param header_path: String, path to header info (if not included in the annotations file)
         :param max_records: Int, number of records to load from annotation file
         :param precomputed_x2: Precomputed weak features (smaller valued feature is better)
                                A dict[(id1, id2)] = 1D vector, where id2 >= id1
@@ -156,14 +157,29 @@ class Database(object):
         self.records = dict()
         if annotation_path:
             ins = open(annotation_path, 'r')
-            feature_names = next(ins).strip('\n').split(',')  # skip the first line, its a header
-            feature_types = next(ins).strip('\n').split(',')  # variable type (e.g. int, string, date)
+            if header_path:
+                header_ins = open(header_path, 'r')
+                feature_names = next(header_ins).strip('\n').split(',')  # skip the first line, its a header
+                feature_types = next(header_ins).strip('\n').split(',')  # variable type (e.g. int, string, date)
+                feature_strengths = next(header_ins).strip('\n').split(',')
+                blocking = next(header_ins).strip('\n').split(',')
+                pairwise_uses = next(header_ins).strip('\n').split(',')
+                feature_names_check = next(ins).strip('\n').split(',')
+                if feature_names != feature_names_check:
+                    raise Exception('Header feature names and annotation feature names do not match')
+                header_ins.close()
+            else:
+                feature_names = next(ins).strip('\n').split(',')  # skip the first line, its a header
+                feature_types = next(ins).strip('\n').split(',')  # variable type (e.g. int, string, date)
+                feature_strengths = next(ins).strip('\n').split(',')
+                blocking = next(ins).strip('\n').split(',')
+                pairwise_uses = next(ins).strip('\n').split(',')
             ignore_indices = find_in_list(feature_types, 'ignore')
             feature_names = remove_indices(ignore_indices, feature_names)
             feature_types = remove_indices(ignore_indices, feature_types)
-            feature_strengths = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
-            blocking = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
-            pairwise_uses = remove_indices(ignore_indices, next(ins).strip('\n').split(','))
+            feature_strengths = remove_indices(ignore_indices, feature_strengths)
+            blocking = remove_indices(ignore_indices, blocking)
+            pairwise_uses = remove_indices(ignore_indices, pairwise_uses)
 
             self.feature_descriptor = FeatureDescriptor(feature_names, feature_types, feature_strengths, blocking,
                                                         pairwise_uses)
@@ -176,6 +192,7 @@ class Database(object):
                 self.records[line_index] = r
                 if line_index >= max_records-1:
                     break
+            ins.close()
         else:
             self.feature_descriptor = None
         self._precomputed_x2 = precomputed_x2

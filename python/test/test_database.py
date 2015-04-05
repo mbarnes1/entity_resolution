@@ -35,7 +35,7 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(len(database.records), 4)
 
     def test_max_size(self):
-        database = Database('test_annotations_10000_cleaned.csv', 409)
+        database = Database('test_annotations_10000_cleaned.csv', max_records=409, header_path='test_annotations_10000_cleaned_header.csv')
         self.assertEqual(len(database.records), 409)
 
     def test_synthetic(self):

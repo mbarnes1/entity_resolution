@@ -96,7 +96,7 @@ class MyTestCase(unittest.TestCase):
         self.assertNotEqual(r1, self._database.records[0])
 
     def test_completeness(self):
-        database = Database('test_annotations_10000_cleaned.csv', max_records=1000)
+        database = Database('test_annotations_10000_cleaned.csv', max_records=1000, header_path='test_annotations_10000_cleaned_header.csv')
         database_train = database.sample_and_remove(800)
         database_test = database
         labels_train = fast_strong_cluster(database_train)
@@ -125,7 +125,7 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(labels_pred, labels_true)
 
     def test_fast_strong_cluster_large(self):
-        database = Database('test_annotations_10000_cleaned.csv', max_records=1000)
+        database = Database('test_annotations_10000_cleaned.csv', max_records=1000, header_path='test_annotations_10000_cleaned_header.csv')
         database_train = database.sample_and_remove(800)
         database_test = database
         labels_train = fast_strong_cluster(database_train)
