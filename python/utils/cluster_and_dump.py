@@ -3,9 +3,12 @@ Loads feature file, performs strong clustering, and dumps output to format:
 line_index (ascending), poster_id (feature #1), cluster_id
 """
 __author__ = 'mbarnes1'
+import sys
+sys.path.append('..')
 from entityresolution import fast_strong_cluster
 from database import Database
 import cProfile
+
 
 
 def main():
