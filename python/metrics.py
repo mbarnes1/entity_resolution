@@ -19,17 +19,19 @@ class Metrics(object):
         self._n = float(len(labels_pred))
         self._labels_true = labels_true
         self._labels_pred = labels_pred
+        print '     Generating frozen clusters for predicted labels'
         self._clusters_pred = _cluster(labels_pred)
+        print '     Generating frozen clusters from true labels'
         self._clusters_true = _cluster(labels_true)
         self.number_entities = len(self._clusters_pred)
         self.pairwise_precision, self.pairwise_recall, self.pairwise_f1 = self._pairwise_precision_recall_f1()
         self.cluster_precision, self.cluster_recall, self.cluster_f1 = self._cluster_precision_recall_f1()
         self.closest_cluster_precision, self.closest_cluster_recall, self.closest_cluster_f1 = \
-            self._closest_cluster_precision_recall_f1()
-        self.aap, self.acp, self.k = self._average_author_cluster_purity()
+            self._closest_cluster_precision_recall_f1()  # SLOW
+        self.aap, self.acp, self.k = self._average_author_cluster_purity()  # SLOW
         self.homogeneity, self.completeness, self.vmeasure = self._homogeneity_completeness_vmeasure()
-        self.variation_of_information = self._variation_of_information()
-        self.purity = self._purity()
+        self.variation_of_information = self._variation_of_information()  # SLOW
+        self.purity = self._purity()  # SLOW
         self._entity_sizes_pred = _get_entity_sizes(self._clusters_pred)
         self._entity_sizes_true = _get_entity_sizes(self._clusters_true)
         print 'metrics evaluated.'
@@ -49,6 +51,7 @@ class Metrics(object):
         :return pairwise_recall: Pairwise recall, a float [0, 1]
         :return pairwise_f1: Pairwise F1, a float [0, 1]
         """
+        print '     Evaluating pairwise precision and recall'
         pairwise_intersection_size = float(_intersection_size(self._clusters_pred, self._clusters_true))
         pairwise_precision = pairwise_intersection_size / _number_pairs(self._clusters_pred) if \
             _number_pairs(self._clusters_pred) else 1.0
@@ -67,6 +70,7 @@ class Metrics(object):
         :return cluster_recall: Cluster recall, a float [0, 1]
         :return cluster_f1: Cluster F1, a float [0, 1]
         """
+        print '     Evaluating cluster precision and recall'
         cluster_precision = float(len(self._clusters_pred & self._clusters_true)) / len(self._clusters_pred)
         cluster_recall = float(len(self._clusters_pred & self._clusters_true)) / len(self._clusters_true)
         beta = 1
@@ -82,6 +86,7 @@ class Metrics(object):
         :return closest_cluster_recall: Closest cluster recall, a float [0, 1]
         :return closest_cluster_f1: Closest cluster F1, a float [0, 1]
         """
+        print '     Evaluating closest cluster precision and recall'
         closest_cluster_precision = _get_closest_cluster_precision_recall(self._clusters_pred, self._clusters_true)
         closest_cluster_recall = _get_closest_cluster_precision_recall(self._clusters_true, self._clusters_pred)
         beta = 1
@@ -97,6 +102,7 @@ class Metrics(object):
         :return average_cluster_purity:
         :return k: Geometric mean of AAP and ACP
         """
+        print '     Evaluating average author and cluster purity'
         average_author_purity = _get_average_purity(self._clusters_true, self._clusters_pred)
         average_cluster_purity = _get_average_purity(self._clusters_pred, self._clusters_true)
         k = (average_author_purity * average_cluster_purity) ** 0.5
@@ -109,6 +115,7 @@ class Metrics(object):
         :return completeness:
         :return vmeasure: Weighting of homogeneity and completeness. Harmonic mean when beta=1
         """
+        print 'Evaluating homogeneity and completeness'
         linear_true, linear_pred = _linearize(self._labels_true, self._labels_pred)
         homogeneity, completeness, vmeasure = sklearn.metrics.homogeneity_completeness_v_measure(linear_true,
                                                                                                  linear_pred)
@@ -124,6 +131,7 @@ class Metrics(object):
         :param S: (optional) The true clusters. Defaults to initial clusters. Available to compute alternative GMDs
         :return cost: The GMD
         """
+        print 'Evaluating global merge distance'
         R = kwargs.get('R', self._clusters_pred)
         S = kwargs.get('S', self._clusters_true)
         # #
@@ -157,6 +165,7 @@ class Metrics(object):
         """
         :return vi: The variation of information
         """
+        print 'Evaluating variation of information'
         vi = (self._entropy(self._clusters_pred) + self._entropy(self._clusters_true) -
               2*self._mutual_information(self._clusters_pred, self._clusters_true))
         return vi
