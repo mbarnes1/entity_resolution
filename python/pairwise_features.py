@@ -4,7 +4,8 @@ All pairwise features and functions
 import numpy as np
 from math import e
 from itertools import izip
-#import Levenshtein
+import Levenshtein
+
 
 def generate_pair_seed(database, labels, class_balance):
     """
@@ -43,7 +44,7 @@ def generate_pair_seed(database, labels, class_balance):
         print '     No class balancing. Using actual class balance.'
         class_balance = float(number_remaining_pos_pairs)/total_number_pairs
     if float(number_remaining_pos_pairs)/total_number_pairs < class_balance:  # limited by pos class (most common)
-        number_requested_pos_class = number_remaining_pos_pairs  # no more than 10000
+        number_requested_pos_class = number_remaining_pos_pairs
         number_requested_neg_class = number_requested_pos_class*(1-class_balance)/class_balance
     else:
         number_requested_neg_class = total_number_neg_pairs  # no more than 10000

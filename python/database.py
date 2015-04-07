@@ -1,7 +1,10 @@
 from record import Record, FeatureDescriptor
 import numpy as np
 from numpy.random import choice
-#import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except:
+    print 'Running on server. Plotting unavailable'
 from itertools import izip
 __author__ = 'mbarnes1'
 
@@ -231,15 +234,19 @@ class Database(object):
 
     def dump(self, out_file):
         """
-        Writes database to csv file
+        Writes database to csv file, with separate header file
         :param out_file: String, file name to dump records to
         """
+        out_file_header = out_file[:-4] + '_header.csv'
         ins = open(out_file, 'w')
+        ins_header = open(out_file_header, 'w')
         ins.write(','.join(self.feature_descriptor.names)+'\n')
-        ins.write(','.join(self.feature_descriptor.types)+'\n')
-        ins.write(','.join(self.feature_descriptor.strengths)+'\n')
-        ins.write(','.join(self.feature_descriptor.blocking)+'\n')
-        ins.write(','.join(self.feature_descriptor.pairwise_uses)+'\n')
+        ins_header.write(','.join(self.feature_descriptor.names)+'\n')
+        ins_header.write(','.join(self.feature_descriptor.types)+'\n')
+        ins_header.write(','.join(self.feature_descriptor.strengths)+'\n')
+        ins_header.write(','.join(self.feature_descriptor.blocking)+'\n')
+        ins_header.write(','.join(self.feature_descriptor.pairwise_uses)+'\n')
+        ins_header.close()
         for counter, (_, r) in enumerate(self.records.iteritems()):
             feature_list = list()
             for subfeatures in r.features:
