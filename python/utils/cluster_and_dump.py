@@ -10,6 +10,7 @@ from database import Database
 import cProfile
 
 
+
 def main():
     path = '/home/scratch/trafficjam/deduped/US_Canada_Extraction_dedup.csv'
     header_path = 'US_Canada_Extraction_dedup_header.csv'
