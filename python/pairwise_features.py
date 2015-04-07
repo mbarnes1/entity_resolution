@@ -4,8 +4,7 @@ All pairwise features and functions
 import numpy as np
 from math import e
 from itertools import izip
-import Levenshtein
-
+#import Levenshtein
 
 def generate_pair_seed(database, labels, class_balance):
     """

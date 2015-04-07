@@ -1,7 +1,7 @@
 from record import Record, FeatureDescriptor
 import numpy as np
 from numpy.random import choice
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from itertools import izip
 __author__ = 'mbarnes1'
 

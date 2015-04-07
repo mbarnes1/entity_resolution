@@ -250,6 +250,7 @@ def fast_strong_cluster(database):
     strong2index = dict()  # [swoosh index, set of ad indices]  node --> edges
     graph = networkx.Graph()
     for _, record in database.records.iteritems():
+        print '     Building strong feature --> index from record', record.line_indices
         indices = record.line_indices
         strong_features = record.get_features('strong')
         if not strong_features:  # no strong features, insert singular entity
@@ -259,8 +260,12 @@ def fast_strong_cluster(database):
                 strong2index[strong].extend(list(indices))
             else:
                 strong2index[strong] = list(indices)
+    print '     ... finished.'
     for strong, indices in strong2index.iteritems():
-        graph.add_edges_from(combinations_with_replacement(indices, 2))
+        print 'Adding edges from indices', indices
+        index0 = indices[0]
+        for index in indices:
+            graph.add_edge(index0, index)
     print 'Finding connected components...'
     connected_components = networkx.connected_components(graph)
     labels = dict()

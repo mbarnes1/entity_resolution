@@ -42,7 +42,7 @@ class Record(object):
         for feature, feature_type in izip(features, self.feature_descriptor.types):
             sub_features = feature.split(';')
             for f in sub_features:
-                if (f != '') & (f != 'none'):
+                if (f != '') & (f != 'none') & (f != 'NULL'):
                     if feature_type == 'string':
                         self.features[index].add(f)
                     elif feature_type == 'int':

@@ -3,15 +3,17 @@ Loads feature file, performs strong clustering, and dumps output to format:
 line_index (ascending), poster_id (feature #1), cluster_id
 """
 __author__ = 'mbarnes1'
+import sys
+sys.path.append('..')
 from entityresolution import fast_strong_cluster
 from database import Database
 import cProfile
 
 
 def main():
-    path = '../test/test_annotations_10000_cleaned.csv'
-    header_path = '../test/test_annotations_10000_cleaned_header.csv'
-    out = open('../strong_clusters.csv', 'w')
+    path = '/home/scratch/trafficjam/deduped/US_Canada_Extraction_dedup.csv'
+    header_path = 'US_Canada_Extraction_dedup_header.csv'
+    out = open('/home/scratch/trafficjam/entity_resolution_outputs/strong_clusters', 'w')
     out.write('line_index, poster_id, cluster_id\n')
     database = Database(path, header_path=header_path)
     strong_clusters = fast_strong_cluster(database)
