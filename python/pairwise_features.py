@@ -7,12 +7,13 @@ from itertools import izip
 import Levenshtein
 
 
-def generate_pair_seed(database, labels, class_balance):
+def generate_pair_seed(database, labels, class_balance, max_minor_class=5000):
     """
     Generates list of pairs to seed from. Useful for removing random process noise for tests on related datasets
     :param database: Database object
     :param labels: Cluster labels of database. Dictionary [identifier, cluster label]
     :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
+    :param max_minor_class: Maximum number of pairs from the smaller class to return (total number of pairs will be larger)
     :return pair_seed: List of pairs, where each pair is a vector of form (identifierA, identifierB)
     """
     print 'Generating pairwise seed with class balance', class_balance
@@ -49,9 +50,9 @@ def generate_pair_seed(database, labels, class_balance):
     else:
         number_requested_neg_class = total_number_neg_pairs  # no more than 10000
         number_requested_pos_class = class_balance*number_requested_neg_class/(1-class_balance)
-    if min(number_requested_neg_class, number_requested_pos_class) > 1000:
-        number_requested_neg_class /= min(number_requested_neg_class, number_requested_pos_class)/1000
-        number_requested_pos_class /= min(number_requested_neg_class, number_requested_pos_class)/1000
+    if min(number_requested_neg_class, number_requested_pos_class) > max_minor_class:
+        number_requested_neg_class /= min(number_requested_neg_class, number_requested_pos_class)/max_minor_class
+        number_requested_pos_class /= min(number_requested_neg_class, number_requested_pos_class)/max_minor_class
     number_requested_pos_class = int(number_requested_pos_class)
     number_requested_neg_class = int(number_requested_neg_class)
     print '     Number of requested intracluster (pos) pairs:', number_requested_pos_class
