@@ -45,14 +45,17 @@ def generate_pair_seed(database, labels, class_balance, max_minor_class=5000):
         print '     No class balancing. Using actual class balance.'
         class_balance = float(number_remaining_pos_pairs)/total_number_pairs
     if float(number_remaining_pos_pairs)/total_number_pairs < class_balance:  # limited by pos class (most common)
+        print '     Limited by positive class'
         number_requested_pos_class = number_remaining_pos_pairs
         number_requested_neg_class = number_requested_pos_class*(1-class_balance)/class_balance
     else:
+        print '     Limited by negative class'
         number_requested_neg_class = total_number_neg_pairs  # no more than 10000
         number_requested_pos_class = class_balance*number_requested_neg_class/(1-class_balance)
     if min(number_requested_neg_class, number_requested_pos_class) > max_minor_class:
-        number_requested_neg_class /= min(number_requested_neg_class, number_requested_pos_class)/max_minor_class
-        number_requested_pos_class /= min(number_requested_neg_class, number_requested_pos_class)/max_minor_class
+        normalizer = min(number_requested_neg_class, number_requested_pos_class)/max_minor_class
+        number_requested_neg_class /= normalizer
+        number_requested_pos_class /= normalizer
     number_requested_pos_class = int(number_requested_pos_class)
     number_requested_neg_class = int(number_requested_neg_class)
     print '     Number of requested intracluster (pos) pairs:', number_requested_pos_class

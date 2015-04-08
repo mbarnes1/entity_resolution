@@ -12,7 +12,7 @@ __author__ = 'mbarnes'
 
 
 def main():
-    type = 'synthetic'  # synthetic or real
+    type = 'real'  # synthetic or real
     train_size = 500
     validation_size = 250
     decision_threshold = 0.999
@@ -28,11 +28,10 @@ def main():
         database.corrupt(corruption_array)
     else:
         regex_path = 'test/test_annotations_10000_cleaned.csv'
-        database = Database(regex_path, max_records=1000)
-
-    database_train = database.sample_and_remove(train_size)
-    database_validation = database.sample_and_remove(validation_size)
-    database_test = database
+        #database = Database(regex_path, max_records=1000)
+        database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample0_10000_header.csv')
+        database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample1_10000_header.csv')
+        database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample1_10000_header.csv')
 
     if type == 'synthetic':
         labels_train = database_train.labels
