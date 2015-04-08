@@ -10,11 +10,11 @@ import numpy as np
 
 
 def main():
-    number_samples = [500, 1000]
+    number_samples = [10000, 100000, 1000000]
     number_databases = 3
-    cluster_path = '../test/test_annotations_10000_cleaned_strong_clusters.csv'  # '/home/scratch/trafficjam/entity_resolution_outputs/strong_clusters.csv'
-    annotations_path = '../test/test_annotations_10000_cleaned.csv'  # '/home/scratch/trafficjam/deduped/US_Canada_Extraction_dedup.csv'
-    header_path = '../test/test_annotations_10000_cleaned_header.csv'  # '/home/scratch/trafficjam/entity_resolution_outputs/US_Canada_Extraction_dedup_header.csv'
+    cluster_path = '/home/scratch/trafficjam/entity_resolution_outputs/strong_clusters.csv'
+    annotations_path = '/home/scratch/trafficjam/deduped/US_Canada_Extraction_dedup.csv'
+    header_path = '/home/scratch/trafficjam/entity_resolution_outputs/US_Canada_Extraction_dedup_header.csv'
 
     database = Database(annotations_path, header_path=header_path)
     ins = open(cluster_path, 'r')
@@ -33,19 +33,20 @@ def main():
     for cluster, indices in cluster_to_indices.iteritems():
         cluster_probabilities.append(float(len(indices))/len(database.records))
     print 'Sampling clusters'
-    cluster_samples = np.random.choice(cluster_to_indices.keys(), sum(number_samples)*number_databases, p=cluster_probabilities)
+    cluster_samples = np.random.choice(cluster_to_indices.keys(), min(850000, sum(number_samples)*number_databases), p=cluster_probabilities)  # only ~850,000 strong clusters available
     counter = 0
     for n in number_samples:
         for j in range(0, number_databases):
-            out_path = 'cluster_subsample'+str(j)+'_'+str(n)+'.csv'  # '/home/scratch/trafficjam/entity_resolution_outputs/cluster_subsample.csv'
+            out_path = '/home/scratch/trafficjam/entity_resolution_outputs/cluster_subsample'+str(j)+'_'+str(n)+'.csv'
             new_database = Database()
             new_database.feature_descriptor = database.feature_descriptor
             while len(new_database.records) < n:
                 cluster = cluster_samples[counter]
                 counter += 1
                 indices = cluster_to_indices[cluster]
-                for index in indices:
-                    new_database.records[index] = database.records[index]
+                if len(indices) < min(.05*n, 10000):  # don't use any clusters with more than 10,000 records or 5% of database size
+                    for index in indices:
+                        new_database.records[index] = database.records[index]
             new_database.dump(out_path)
 
 

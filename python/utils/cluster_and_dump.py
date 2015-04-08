@@ -13,7 +13,7 @@ import cProfile
 
 def main():
     path = '/home/scratch/trafficjam/deduped/US_Canada_Extraction_dedup.csv'
-    header_path = 'US_Canada_Extraction_dedup_header.csv'
+    header_path = '/home/scratch/trafficjam/entity_resolution_outputs/US_Canada_Extraction_dedup_header.csv'
     out = open('/home/scratch/trafficjam/entity_resolution_outputs/strong_clusters', 'w')
     out.write('line_index, poster_id, cluster_id\n')
     database = Database(path, header_path=header_path)
