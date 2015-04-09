@@ -18,12 +18,10 @@ def main():
     out = open(header_path, 'w')
     in1 = open(annotations_header_path, 'r')
     in2 = open(LM_header_path, 'r')
-    for counter, (line1, line2) in enumerate(izip(in1, in2)):
+    for line1, line2 in izip(in1, in2):
         line1 = line1.strip('\n')
         line2 = ','.join(line2.strip('\n').split(',')[0:30])
         new_line = line1 + ',' + line2 + '\n'
-        if counter is 0:
-            feature_names = new_line
         out.write(new_line)
     out.close()
     in1.close()
@@ -31,7 +29,6 @@ def main():
 
     # Create the master feature file
     out = open(out_path, 'w')
-    out.write(feature_names)
     in1 = open(annotations_path, 'r')
     in2 = open(LM_path, 'r')
     for counter, (line1, line2) in enumerate(izip(in1, in2)):

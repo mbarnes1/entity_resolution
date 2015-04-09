@@ -13,8 +13,8 @@ def main():
     number_samples = [10000, 100000, 1000000]
     number_databases = 3
     cluster_path = '/home/scratch/trafficjam/entity_resolution_outputs/strong_clusters.csv'
-    annotations_path = '/home/scratch/trafficjam/deduped/US_Canada_Extraction_dedup.csv'
-    header_path = '/home/scratch/trafficjam/entity_resolution_outputs/US_Canada_Extraction_dedup_header.csv'
+    annotations_path = '/home/scratch/trafficjam/entity_resolution_inputs/master.csv'
+    header_path = '/home/scratch/trafficjam/entity_resolution_outputs/master_header_all.csv'
 
     ins = open(cluster_path, 'r')
     cluster_to_indices = dict()
