@@ -5,6 +5,7 @@ __author__ = 'mbarnes1'
 from itertools import izip
 import cProfile
 
+
 def main():
     LM_path = '/home/scratch/trafficjam/entity_resolution_inputs/US_Canada_LM50.csv'
     LM_header_path = '/home/scratch/trafficjam/entity_resolution_inputs/US_Canada_LM50_header.csv'
@@ -18,6 +19,8 @@ def main():
     in1 = open(annotations_header_path, 'r')
     in2 = open(LM_header_path, 'r')
     for line1, line2 in izip(in1, in2):
+        line1 = line1.strip('\n')
+        line2 = ','.join(line2.strip('\n').split(',')[0:30])
         out.write(line1 + ',' + line2)
     out.close()
 
