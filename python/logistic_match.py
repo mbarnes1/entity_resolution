@@ -95,7 +95,7 @@ class LogisticMatchFunction(object):
         :return RocCurve: An RocCurve object
         """
         self.class_balance_validation = class_balance
-        pair_seed = generate_pair_seed(database_test, labels_test, class_balance)
+        pair_seed = generate_pair_seed(database_test, labels_test, class_balance, require_direct_match=True)
         x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, pair_seed)
         x1_bar_probability = self._logreg.predict_proba(x2_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))

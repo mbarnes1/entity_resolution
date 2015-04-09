@@ -1,5 +1,5 @@
 """
-Logistic regression match function
+Decision tree match function
 Satisfies ICAR properties
 """
 from sklearn import tree
@@ -81,7 +81,7 @@ class TreeMatchFunction(object):
         :return RocCurve: An RocCurve object
         """
         self.class_balance_validation = class_balance
-        pair_seed = generate_pair_seed(database_test, labels_test, class_balance)
+        pair_seed = generate_pair_seed(database_test, labels_test, class_balance, require_direct_match=True)
         y_test, x_test, _ = get_pairwise_features(database_test, labels_test, pair_seed)
         x_bar_probability = self._classifier.predict_proba(x_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))

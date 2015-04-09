@@ -48,8 +48,8 @@ def main():
     entities = deepcopy(database_test)
     blocking_scheme = BlockingScheme(entities, max_block_size, single_block=False)
 
-    train_seed = generate_pair_seed(database_train, labels_train, train_class_balance)
-    match_function = LogisticMatchFunction(database_train, labels_train, train_seed, decision_threshold)
+    train_seed = generate_pair_seed(database_train, labels_train, train_class_balance, require_direct_match=True)
+    match_function = TreeMatchFunction(database_train, labels_train, train_seed, decision_threshold)
     match_function.test(database_validation, labels_validation, 0.5)
     match_function.roc.make_plot()
 
