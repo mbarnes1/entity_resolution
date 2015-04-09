@@ -15,6 +15,7 @@ def main():
     cluster_path = '/home/scratch/trafficjam/entity_resolution_outputs/strong_clusters.csv'
     annotations_path = '/home/scratch/trafficjam/entity_resolution_inputs/master.csv'
     header_path = '/home/scratch/trafficjam/entity_resolution_outputs/master_header_all.csv'
+    database = Database(annotations_path, header_path=header_path)
 
     ins = open(cluster_path, 'r')
     cluster_to_indices = dict()
