@@ -6,12 +6,12 @@ from itertools import izip
 import cProfile
 
 def main():
-    LM_path = 'US_Canada_LM50.csv'
-    LM_header_path = 'US_Canada_LM50_header.csv'
+    LM_path = '/home/scratch/trafficjam/entity_resolution_inputs/US_Canada_LM50.csv'
+    LM_header_path = '/home/scratch/trafficjam/entity_resolution_inputs/US_Canada_LM50_header.csv'
     annotations_path = '/home/scratch/trafficjam/deduped/US_Canada_Extraction_dedup.csv'
-    annotations_header_path = 'US_Canada_Extraction_dedup_header.csv'
-    header_path = 'master_header_all.csv'
-    out_path = 'master.csv'
+    annotations_header_path = '/home/scratch/trafficjam/entity_resolution_inputs/US_Canada_Extraction_dedup_header.csv'
+    header_path = '/home/scratch/trafficjam/entity_resolution_inputs/master_header_all.csv'
+    out_path = '/home/scratch/trafficjam/entity_resolution_inputs/master.csv'
 
     # Create the master header file
     out = open(header_path, 'w')
