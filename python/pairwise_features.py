@@ -7,13 +7,15 @@ from itertools import izip
 import Levenshtein
 
 
-def generate_pair_seed(database, labels, class_balance, max_minor_class=5000):
+def generate_pair_seed(database, labels, class_balance, max_minor_class=5000, require_direct_match=False):
     """
     Generates list of pairs to seed from. Useful for removing random process noise for tests on related datasets
     :param database: Database object
     :param labels: Cluster labels of database. Dictionary [identifier, cluster label]
     :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
     :param max_minor_class: Maximum number of pairs from the smaller class to return (total number of pairs will be larger)
+    :param require_direct_match: If True, records of the positive class much have a direct strong match
+                         (in addition to being in the same cluster i.e. having the same label)
     :return pair_seed: List of pairs, where each pair is a vector of form (identifierA, identifierB)
     """
     print 'Generating pairwise seed with class balance', class_balance
@@ -70,6 +72,7 @@ def generate_pair_seed(database, labels, class_balance, max_minor_class=5000):
     to_balance_indices = np.random.choice(range(0, number_requested_samples), number_requested_pos_class, replace=False)  # indices of seed to balance
     samples_to_balance = np.zeros(number_requested_samples)
     samples_to_balance[to_balance_indices] = 1
+    weak_pairs = list()
     for balance_this_sample in samples_to_balance:
         if balance_this_sample:
             print '     Trying to sample pair from within cluster...',
@@ -78,23 +81,29 @@ def generate_pair_seed(database, labels, class_balance, max_minor_class=5000):
             pair = None
             while not pair:
                 pair = tuple(np.random.choice(cluster_to_records[cluster], size=2, replace=False))
+                if require_direct_match:
+                    r1 = database.records[pair[0]]
+                    r2 = database.records[pair[1]]
+                    if not strong_match(r1, r2):
+                        weak_pairs.append(pair)
                 pair_flipped = (pair[1], pair[0])
                 if (pair[0] != pair[1]) and \
                         (pair not in pairs) and \
-                        (pair_flipped not in pairs):  # valid pair, not used before
+                        (pair_flipped not in pairs) and\
+                        (pair not in weak_pairs):  # valid pair, not used before
                     print 'successful.'
                     pairs.add(pair)
                     within_cluster_pairs += 1
-                    print '         Updating this cluster probability from', cluster_prob[cluster_index],
-                    cluster_prob[cluster_index] -= 1.0/number_remaining_pos_pairs
-                    if abs(cluster_prob[cluster_index]) < 0.0000001:  # if within E-7 of zero
-                        cluster_prob[cluster_index] = 0
-                    print 'to', cluster_prob[cluster_index]
-                    number_remaining_pos_pairs -= 1
-                    normalizer = sum(cluster_prob)
-                    cluster_prob = cluster_prob/normalizer
                 else:
                     pair = None
+                print '         Updating this cluster probability from', cluster_prob[cluster_index],
+                cluster_prob[cluster_index] -= 1.0/number_remaining_pos_pairs
+                if abs(cluster_prob[cluster_index]) < 0.0000001:  # if within E-7 of zero
+                    cluster_prob[cluster_index] = 0
+                print 'to', cluster_prob[cluster_index]
+                number_remaining_pos_pairs -= 1
+                normalizer = sum(cluster_prob)
+                cluster_prob = cluster_prob/normalizer
         else:
             pair = None
             while not pair:
@@ -121,13 +130,14 @@ def generate_pair_seed(database, labels, class_balance, max_minor_class=5000):
     return pairs
 
 
-def get_pairwise_features(database, labels_train, pair_seed):
+def get_pairwise_features(database, labels_train, pair_seed, mean_imputation=True):
     """
     Randomly samples pairs of records, without replacement.
     Can balance classes, using labels_train
     :param database: Database object to sample from
     :param labels_train: Cluster labels of the dictionary form [identifier, cluster label]
     :param pair_seed: Pairs to use.
+    :param mean_imputation: Whether to use mean imputation (necessary for some classifiers e.g. log reg)
     :return y: Vector of labels, values takes either 0 or 1
     :return x: n x m Matrix of weak features, where n is number_samples and m is number of weak features
     :return m: Mean imputation vector of weak features, 1 x number of weak features
@@ -149,7 +159,10 @@ def get_pairwise_features(database, labels_train, pair_seed):
         x.append(_x2)
     y = np.asarray(y)
     x = np.asarray(x)
-    m = mean_imputation(x)
+    if mean_imputation:
+        m = mean_imputation(x)
+    else:
+        m = None
     return y, x, m
 
 
