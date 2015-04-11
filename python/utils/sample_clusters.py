@@ -20,8 +20,8 @@ def main():
     ins = open(cluster_path, 'r')
     cluster_to_indices = dict()
     next(ins)  # skip header
-    for counter, line in enumerate(ins):
-        print 'Loading cluster file', counter
+    for cluster_counter, line in enumerate(ins):
+        print 'Loading cluster file', cluster_counter
         line = line.rstrip('\n').split(',')
         index = int(line[0])
         poster_id = int(line[1])
@@ -36,25 +36,19 @@ def main():
     print 'Sampling clusters'
     cluster_samples = np.random.choice(cluster_to_indices.keys(), min(850000, sum(number_samples)*number_databases), p=cluster_probabilities)  # only ~850,000 strong clusters available
     cluster_counter = 0
-    record_counter = 0
     for n in number_samples:
         for j in range(0, number_databases):
-            out_path = '/home/scratch/trafficjam/entity_resolution_outputs/subsample_indices'+str(j)+'_'+str(n)+'.csv'
-            outs = open(out_path, 'w')
-            outs.write('line_index, poster_id, cluster_id\n')
-            while record_counter < n:
+            out_path = '/home/scratch/trafficjam/entity_resolution_inputs/subsample_indices'+str(j)+'_'+str(n)+'.csv'
+            new_database = Database()
+            new_database.feature_descriptor = database.feature_descriptor
+            while len(new_database.records) < n:
                 cluster = cluster_samples[cluster_counter]
                 cluster_counter += 1
                 indices = cluster_to_indices[cluster]
-                if len(indices) < min(.05*n, 10000):  # don't use any clusters with more than 10,000 records or 5% of database size
-                    for line_index in indices:
-                        poster_id = database.records[line_index].features[0]
-                        if poster_id:
-                            (poster_id,) = poster_id  # unpack from set
-                        else:
-                            poster_id = ''
-                        outs.write(str(line_index)+','+str(poster_id)+','+str(cluster)+'\n')
-            outs.close()
+                if len(indices) < max(5000, 0.05*n):  # only clusters less than 5000 or 5%, whichever is largest
+                    for index in indices:
+                        new_database.records[index] = database.records[index]
+            new_database.dump(out_path)
 
 
 if __name__ == '__main__':
