@@ -7,7 +7,7 @@ from itertools import izip
 import Levenshtein
 
 
-def generate_pair_seed(database, labels, class_balance, max_minor_class=5000, require_direct_match=False):
+def generate_pair_seed(database, labels, class_balance, max_minor_class=5000, require_direct_match=True):
     """
     Generates list of pairs to seed from. Useful for removing random process noise for tests on related datasets
     :param database: Database object
@@ -16,7 +16,7 @@ def generate_pair_seed(database, labels, class_balance, max_minor_class=5000, re
     :param max_minor_class: Maximum number of pairs from the smaller class to return (total number of pairs will be larger)
     :param require_direct_match: If True, records of the positive class much have a direct strong match
                          (in addition to being in the same cluster i.e. having the same label)
-    :return pair_seed: List of pairs, where each pair is a vector of form (identifierA, identifierB)
+    :return pair_seed: List of pairs, where each pair is a tuple of form (identifierA, identifierB)
     """
     print 'Generating pairwise seed with class balance', class_balance
     pairs = set()
@@ -130,14 +130,14 @@ def generate_pair_seed(database, labels, class_balance, max_minor_class=5000, re
     return pairs
 
 
-def get_pairwise_features(database, labels_train, pair_seed, mean_imputation=True):
+def get_pairwise_features(database, labels_train, pair_seed, impute=True):
     """
     Randomly samples pairs of records, without replacement.
     Can balance classes, using labels_train
     :param database: Database object to sample from
     :param labels_train: Cluster labels of the dictionary form [identifier, cluster label]
     :param pair_seed: Pairs to use.
-    :param mean_imputation: Whether to use mean imputation (necessary for some classifiers e.g. log reg)
+    :param impute: Whether to use mean imputation (necessary for some classifiers e.g. log reg)
     :return y: Vector of labels, values takes either 0 or 1
     :return x: n x m Matrix of weak features, where n is number_samples and m is number of weak features
     :return m: Mean imputation vector of weak features, 1 x number of weak features
@@ -159,7 +159,7 @@ def get_pairwise_features(database, labels_train, pair_seed, mean_imputation=Tru
         x.append(_x2)
     y = np.asarray(y)
     x = np.asarray(x)
-    if mean_imputation:
+    if impute:
         m = mean_imputation(x)
     else:
         m = None

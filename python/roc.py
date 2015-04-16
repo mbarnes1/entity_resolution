@@ -147,6 +147,7 @@ class RocCurve(object):
         else:
             f, (ax1, ax2) = pl.subplots(1, 2, sharey=True, figsize=(14, 6), facecolor='white')
             ax = (ax1, ax2)
+        # TODO: Only print some of these
         print 'Prob, TPR, FPR'
         np.set_printoptions(threshold=np.nan)
         print np.column_stack((self.prob[-2::-1], self.tpr[::-1], self.fpr[::-1]))
