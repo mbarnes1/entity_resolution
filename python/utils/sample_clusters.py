@@ -14,7 +14,7 @@ def main():
     number_databases = 3
     cluster_path = '/home/scratch/trafficjam/entity_resolution_outputs/strong_clusters.csv'
     annotations_path = '/home/scratch/trafficjam/entity_resolution_inputs/master.csv'
-    header_path = '/home/scratch/trafficjam/entity_resolution_outputs/master_header_all.csv'
+    header_path = '/home/scratch/trafficjam/entity_resolution_inputs/master_header_all.csv'
     database = Database(annotations_path, header_path=header_path)
 
     ins = open(cluster_path, 'r')
@@ -38,14 +38,14 @@ def main():
     cluster_counter = 0
     for n in number_samples:
         for j in range(0, number_databases):
-            out_path = '/home/scratch/trafficjam/entity_resolution_inputs/subsample_indices'+str(j)+'_'+str(n)+'.csv'
+            out_path = '/home/scratch/trafficjam/entity_resolution_inputs/subsample'+str(j)+'_'+str(n)+'.csv'
             new_database = Database()
             new_database.feature_descriptor = database.feature_descriptor
             while len(new_database.records) < n:
                 cluster = cluster_samples[cluster_counter]
                 cluster_counter += 1
                 indices = cluster_to_indices[cluster]
-                if len(indices) < max(5000, 0.05*n):  # only clusters less than 5000 or 5%, whichever is largest
+                if len(indices) < min(10000, 0.05*n):  # only clusters less than 5000 or 5%
                     for index in indices:
                         new_database.records[index] = database.records[index]
             new_database.dump(out_path)
