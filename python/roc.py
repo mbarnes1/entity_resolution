@@ -60,6 +60,9 @@ class RocCurve(object):
         for prob, fpr, tpr in izip(self.prob, self.fpr, self.tpr):
             print "{:10.4f}, {:10.4f}, {:10.4f}".format(prob, fpr, tpr)
 
+        self.tpr_l, self.tpr_u = wilson_confidence(self.tpr, np.sum(self.labels))
+        self.fpr_l, self.fpr_u = wilson_confidence(self.fpr, np.sum(~self.labels))
+
     def get_recall(self, threshold):
         """
         Returns the recall at the specified threshold
@@ -115,30 +118,49 @@ class RocCurve(object):
 
         return precision, precision_lower_ci, precision_upper_ci
 
-    def write(self, path):
+    def write_rates(self, path):
         """
         Write TPR and FPR to a flat file
         :param path: File path to write
         """
-        rates = np.column_stack((self.tpr, self.fpr))
-        np.savetxt(path, rates, delimiter=",", header='tpr,fpr')
+        rates = np.column_stack((self.tpr[::-1], self.fpr[::-1], self.tpr_l, self.tpr_u, self.fpr_l, self.fpr_u))
+        np.savetxt(path, rates, delimiter=",", header='tpr,fpr,tpr_lower,tpr_upper,fpr_lower,fpr_upper')
 
-    def make_plot(self, title='P(strong | weak)'):
+    def write_labels(self, path):
+        """
+        Writes the labels and probabilities, for recreating an ROC object
+        :param path:
+        """
+        array = np.column_stack((self.labels, self.prob))
+        np.savetxt(path, array, delimiter=',', header='label,probability')
+
+    def make_plot(self, title='P(strong | weak)', ax=None):
+        """
+        Makes the ROC plot and returns the corresponding axes
+        :param title:
+        :param ax: Tuple of (ax1, ax2)
+        :return ax: Tuple of (ax1, ax2)
+        """
         import pylab as pl
-        f, (ax1, ax2) = pl.subplots(1, 2, sharey=True, figsize=(14, 6), facecolor='white')
-        tpr_l, tpr_u = wilson_confidence(self.tpr, np.sum(self.labels))
-        fpr_l, fpr_u = wilson_confidence(self.fpr, np.sum(~self.labels))
-
+        if ax:
+            (ax1, ax2) = ax
+        else:
+            f, (ax1, ax2) = pl.subplots(1, 2, sharey=True, figsize=(14, 6), facecolor='white')
+            ax = (ax1, ax2)
+        # TODO: Only print some of these
+        print 'Prob, TPR, FPR'
+        np.set_printoptions(threshold=np.nan)
+        print np.column_stack((self.prob[-2::-1], self.tpr[::-1], self.fpr[::-1]))
         c1 = pl.rcParams['axes.color_cycle'][2]
         ax1.plot(self.fpr, self.tpr, color=c1)
         ax1.grid(True)
-        ax1.fill_between(fpr_l, 0, tpr_u, color=c1, alpha=0.2)
-        ax1.fill_between(fpr_u, 0, tpr_l, color='w')
+        ax1.fill_between(self.fpr_l, 0, self.tpr_u, color=c1, alpha=0.2)
+        ax1.fill_between(self.fpr_u, 0, self.tpr_l, color='w')
         ax1.set_xlim([0, 1.0])
         ax1.set_ylim([0, 1.0])
 
-        ax2.fill_between(fpr_l, 0, tpr_u, color=c1, alpha=0.2)
-        ax2.fill_between(fpr_u, 0, tpr_l, color='w')
+        ax2.fill_between(self.fpr_l, 0, self.tpr_u, color=c1, alpha=0.2)
+        ax2.fill_between(self.fpr_u, 0, self.tpr_l, color='w')
         ax2.semilogx(self.fpr, self.tpr, color=c1)
         ax2.set_xlim([0, 1.0])
         ax2.grid(True)
@@ -149,8 +171,9 @@ class RocCurve(object):
         ax2.set_ylabel('True Positive Rate')
         pl.suptitle(title)
 
-        pl.show()
+        #pl.show()
         #pl.savefig('roc.png', facecolor='white', edgecolor='none')
+        return ax
 
 
 def wilson_confidence(p, n):

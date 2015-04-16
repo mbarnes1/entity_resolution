@@ -287,28 +287,34 @@ def weak_connected_components(database, match_function, blocking_scheme):
     """
     print 'Finding weakly connected components'
     pairs = set()
-    for block_name, records in blocking_scheme.strong_blocks.iteritems():
-        for pair in permutations(records, 2):
-            pairs.add(pair)
-    for block_name, records in blocking_scheme.weak_blocks.iteritems():
+    #for block_name, records in blocking_scheme.strong_blocks.iteritems():
+    #    for pair in permutations(records, 2):
+    #        pairs.add(pair)
+    for counter, (block_name, records) in enumerate(blocking_scheme.weak_blocks.iteritems()):
+        print '     Adding pairs from block', counter, 'of', len(blocking_scheme.weak_blocks)
         for pair in permutations(records, 2):
             pairs.add(pair)
     sparse_adjacency_matrix = list()  # symmetric, only stores lower triangular portion (i.e. pair(0)<pair(1))
-    print 'Total number of pairs in blocking scheme to evaluate:', len(sparse_adjacency_matrix)
-    for pair in pairs:
+    print 'Total number of pairs in blocking scheme to evaluate:', len(pairs)
+    for counter, pair in enumerate(pairs):
+        print '     Evaluating weak pair', counter, 'of', len(pairs)
         if pair[0] < pair[1]:
             r1 = database.records[pair[0]]
             r2 = database.records[pair[1]]
             if match_function.match(r1, r2):
                 sparse_adjacency_matrix.append(pair)
     # Add singleton entities
+    print 'Found', len(sparse_adjacency_matrix), 'weak matches.'
     for record_id, _ in database.records.iteritems():
         pair = (record_id, record_id)
         sparse_adjacency_matrix.append(pair)
+    print 'Creating graph...'
     graph = networkx.Graph(sparse_adjacency_matrix)
+    print 'Finding connected components...'
     connected_components = networkx.connected_components(graph)
     identifier_to_cluster = dict()
     for cluster_label, component in enumerate(connected_components):
         for record_id in component:
             identifier_to_cluster[record_id] = cluster_label
+    print 'Finished weak connected components'
     return identifier_to_cluster

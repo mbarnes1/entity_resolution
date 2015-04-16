@@ -65,7 +65,7 @@ class ForestMatchFunction(object):
         :param pair_seed: List of pairs to use
         :return x_mean: Mean feature values used in imputation (i.e. to fill in missing features)
         """
-        y, x, _ = get_pairwise_features(database_train, labels_train, pair_seed, mean_imputation=False)
+        y, x, _ = get_pairwise_features(database_train, labels_train, pair_seed, impute=False)
         print 'Training decision forest pairwise match function...'
         print '     Pos/Neg training sample class split: ', sum(y), '/', len(y) - sum(y)
         # Write features to text file
@@ -77,17 +77,16 @@ class ForestMatchFunction(object):
         print 'Match function training complete.'
         return x_mean
 
-    def test(self, database_test, labels_test, class_balance):
+    def test(self, database_test, labels_test, pair_seed):
         """
         Get testing samples and test the surrogate match function. Evaluated with ROC curve
         :param database_test: RecordDatabase object
         :param labels_test: Corresponding labels, of dict form [record_id, label]
-        :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
+        :param pair_seed: List of pairs, where each pair is a tuple of form (identifierA, identifierB)
         :return RocCurve: An RocCurve object
         """
-        self.class_balance_validation = class_balance
-        pair_seed = generate_pair_seed(database_test, labels_test, class_balance, require_direct_match=True)
         y_test, x_test, _ = get_pairwise_features(database_test, labels_test, pair_seed)
+        self.class_balance_validation = float(sum(y_test))/len(y_test)
         # Save to text file
         # Run executable
         # Load csv file
