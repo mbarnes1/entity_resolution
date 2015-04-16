@@ -72,17 +72,16 @@ class TreeMatchFunction(object):
         print 'Match function training complete.'
         return x_mean
 
-    def test(self, database_test, labels_test, class_balance):
+    def test(self, database_test, labels_test, pair_seed):
         """
         Get testing samples and test the surrogate match function. Evaluated with ROC curve
         :param database_test: RecordDatabase object
         :param labels_test: Corresponding labels, of dict form [record_id, label]
-        :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
+        :param pair_seed: List of pairs, where each pair is a tuple of form (identifierA, identifierB)
         :return RocCurve: An RocCurve object
         """
-        self.class_balance_validation = class_balance
-        pair_seed = generate_pair_seed(database_test, labels_test, class_balance, require_direct_match=True)
         y_test, x_test, _ = get_pairwise_features(database_test, labels_test, pair_seed)
+        self.class_balance_validation = float(sum(y_test))/len(y_test)
         x_bar_probability = self._classifier.predict_proba(x_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))
         #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')

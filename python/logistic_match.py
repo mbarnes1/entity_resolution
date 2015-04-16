@@ -86,21 +86,20 @@ class LogisticMatchFunction(object):
         print 'Intercept: ', self._logreg.intercept_
         return x2_mean
 
-    def test(self, database_test, labels_test, class_balance):
+    def test(self, database_test, labels_test, pair_seed):
         """
         Get testing samples and test the surrogate match function. Evaluated with ROC curve
         :param database_test: RecordDatabase object
-        :param test_size: Number of pairwise samples to use in testing
-        :param class_balance: Float [0, 1.0]. Percent of matches in seed (0=all mismatch, 1=all match)
+        :param labels_test: Corresponding labels, of dict form [record_id, label]
+        :param pair_seed: List of pairs, where each pair is a tuple of form (identifierA, identifierB)
         :return RocCurve: An RocCurve object
         """
-        self.class_balance_validation = class_balance
-        pair_seed = generate_pair_seed(database_test, labels_test, class_balance, require_direct_match=True)
-        x1_test, x2_test, _ = get_pairwise_features(database_test, labels_test, pair_seed)
-        x1_bar_probability = self._logreg.predict_proba(x2_test)[:, 1]
+        y_test, x_test, _ = get_pairwise_features(database_test, labels_test, pair_seed)
+        self.class_balance_validation = float(sum(y_test))/len(y_test)
+        x1_bar_probability = self._logreg.predict_proba(x_test)[:, 1]
         #output = np.column_stack((x1_test, x1_bar_probability))
         #np.savetxt('roc_labels.csv', output, delimiter=",", header='label,probability', fmt='%.1i,%5.5f')
-        roc = RocCurve(x1_test, x1_bar_probability)
+        roc = RocCurve(y_test, x1_bar_probability)
         self.roc = roc
         sorted_indices = np.argsort(-1*x1_bar_probability)
         for sorted_index in sorted_indices:
