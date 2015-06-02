@@ -75,7 +75,7 @@ class ForestMatchFunction(object):
 
         self._classifier.fit(x, y)
         print 'Match function training complete.'
-        return x_mean
+
 
     def test(self, database_test, labels_test, pair_seed):
         """

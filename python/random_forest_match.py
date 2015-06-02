@@ -91,10 +91,10 @@ class ForestMatchFunction(object):
         for sorted_index in sorted_indices:
             x1_bar = x_bar_probability[sorted_index]
             pair = pair_seed[sorted_index]
-            print 'Test pair P(match) = ', x1_bar
-            database_test.records[pair[0]].display(indent='     ')
-            print '     ----'
-            database_test.records[pair[1]].display(indent='     ')
+            #print 'Test pair P(match) = ', x1_bar
+            #database_test.records[pair[0]].display(indent='     ')
+            #print '     ----'
+            #database_test.records[pair[1]].display(indent='     ')
         return roc
 
     def match(self, r1, r2):
@@ -102,16 +102,38 @@ class ForestMatchFunction(object):
         Determines if two records match
         :param r1: Record object
         :param r2: Record object
-        :return: False or True, whether r1 and r2 match
+        :return x1_hat: False or True, whether r1 and r2 match
         :return p_x1: Probability of weak match
         """
         # x1 = get_x1(r1, r2)
         # if np.isnan(x1):
         #     x1 = False
-        x2 = get_weak_pairwise_features(r1, r2)
-        np.copyto(x2, self._x_mean, where=np.isnan(x2))  # mean imputation
-        p_x1 = self._classifier.predict_proba(x2)[0, 1]
-        x1_hat = p_x1 > self._decision_threshold
+        x = get_weak_pairwise_features(r1, r2)
+        np.copyto(x, self._x_mean, where=np.isnan(x))  # mean imputation
+        prob = self._classifier.predict_proba(x)[0, 1]
+        match = prob >= self._decision_threshold
         if r1 == r2:
-            x1_hat = True  # if records are the same, to satisfy Idempotence property
-        return x1_hat, p_x1
+            match = True  # if records are the same, to satisfy Idempotence property
+        return match, prob
+
+    def batch_match(self, records):
+        """
+        Batch mode of match
+        :param records: List of pairs of records
+        :return match: List of booleans, whether the corresponding record tuple matches
+        :return prob: Probability of weak match
+        """
+        n = len(records)
+        m = records(0)(0).feature_descriptor.number
+        X = np.empty([n, m])
+        idempotence = list()
+        for i, pair in enumerate(records):
+            r1 = pair(0)
+            r2 = pair(1)
+            idempotence.append(r1 == r2)
+            X[i, :] = get_weak_pairwise_features(r1, r2)
+        np.copyto(X, self._x_mean, where=np.isnan(X))
+        prob = self._classifier.predict_proba(X)[:, 1]
+        match = (prob >= self._decision_threshold) or idempotence
+        return match, prob
+

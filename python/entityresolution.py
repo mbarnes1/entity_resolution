@@ -5,8 +5,10 @@ from pairwise_features import get_weak_pairwise_features
 import gc
 import traceback
 import os
-from itertools import permutations, combinations_with_replacement
+from itertools import combinations_with_replacement
 import networkx
+from copy import deepcopy, copy
+import sys
 __author__ = 'mbarnes1'
 
 
@@ -285,36 +287,52 @@ def weak_connected_components(database, match_function, blocking_scheme):
     :param blocking_scheme: BlockingScheme object
     :return identifier_to_cluster: Predicted labels, of dictionary form [record id, cluster label]:
     """
-    print 'Finding weakly connected components'
-    pairs = set()
-    #for block_name, records in blocking_scheme.strong_blocks.iteritems():
-    #    for pair in permutations(records, 2):
-    #        pairs.add(pair)
-    for counter, (block_name, records) in enumerate(blocking_scheme.weak_blocks.iteritems()):
-        print '     Adding pairs from block', counter, 'of', len(blocking_scheme.weak_blocks)
-        for pair in permutations(records, 2):
-            pairs.add(pair)
-    sparse_adjacency_matrix = list()  # symmetric, only stores lower triangular portion (i.e. pair(0)<pair(1))
-    print 'Total number of pairs in blocking scheme to evaluate:', len(pairs)
-    for counter, pair in enumerate(pairs):
-        print '     Evaluating weak pair', counter, 'of', len(pairs)
-        if pair[0] < pair[1]:
-            r1 = database.records[pair[0]]
-            r2 = database.records[pair[1]]
-            if match_function.match(r1, r2):
-                sparse_adjacency_matrix.append(pair)
-    # Add singleton entities
-    print 'Found', len(sparse_adjacency_matrix), 'weak matches.'
-    for record_id, _ in database.records.iteritems():
-        pair = (record_id, record_id)
-        sparse_adjacency_matrix.append(pair)
-    print 'Creating graph...'
-    graph = networkx.Graph(sparse_adjacency_matrix)
-    print 'Finding connected components...'
-    connected_components = networkx.connected_components(graph)
-    identifier_to_cluster = dict()
-    for cluster_label, component in enumerate(connected_components):
-        for record_id in component:
-            identifier_to_cluster[record_id] = cluster_label
-    print 'Finished weak connected components'
-    return identifier_to_cluster
+    print 'Finding weakly connected components.'
+    print 'Building dual hash tables (forward) ...'
+    block_to_records = copy(blocking_scheme.weak_blocks)
+    block_to_records.update(blocking_scheme.strong_blocks)
+    record_to_blocks = dict()
+    for i, (block, record_ids) in enumerate(block_to_records.iteritems()):
+        sys.stdout.write("\rBuilding dual hash tables (reverse), %i" % i)
+        sys.stdout.flush()
+        for idx in record_ids:
+            if idx in record_to_blocks:
+                record_to_blocks.add(block)
+            else:
+                record_to_blocks[idx] = {block}
+    print(' ')
+
+    connected_components = list()
+    while record_to_blocks:
+        central_node, blocks = record_to_blocks.popitem()
+        print 'Starting new exploration at record', central_node, '. ', len(record_to_blocks), ' records remain'
+        record_to_blocks[central_node] = blocks
+        component = set()
+        to_explore = {central_node}
+        while to_explore:
+            current_node = to_explore.pop()
+            print '     Exploring node', current_node
+            r1 = database.records[current_node]
+            for block in record_to_blocks[current_node]:
+                for idx in block_to_records[block].difference(to_explore | {current_node}):
+                    r2 = database.records[idx]
+                    match, _ = match_function.match(r1, r2)
+                    if match:
+                        to_explore.add(idx)
+            remove_node(current_node, record_to_blocks, block_to_records)
+            component.add(current_node)
+        connected_components.append(component)
+
+    record_to_cluster = dict()
+    for cluster_id, component in enumerate(connected_components):
+        for idx in component:
+            if idx in record_to_cluster:
+                raise KeyError('Should be only one instance of each node in connected components')
+            record_to_cluster[idx] = cluster_id
+    return record_to_cluster
+
+
+def remove_node(node, record_to_blocks, block_to_records):
+    blocks = record_to_blocks.pop(node)
+    for block in blocks:
+        block_to_records[block].remove(node)

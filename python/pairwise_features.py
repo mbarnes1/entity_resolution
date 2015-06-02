@@ -96,14 +96,14 @@ def generate_pair_seed(database, labels, class_balance, max_minor_class=5000, re
                     within_cluster_pairs += 1
                 else:
                     pair = None
-                print '         Updating this cluster probability from', cluster_prob[cluster_index],
-                cluster_prob[cluster_index] -= 1.0/number_remaining_pos_pairs
-                if abs(cluster_prob[cluster_index]) < 0.0000001:  # if within E-7 of zero
-                    cluster_prob[cluster_index] = 0
-                print 'to', cluster_prob[cluster_index]
-                number_remaining_pos_pairs -= 1
-                normalizer = sum(cluster_prob)
-                cluster_prob = cluster_prob/normalizer
+            print '         Updating this cluster probability from', cluster_prob[cluster_index],
+            cluster_prob[cluster_index] -= 1.0/number_remaining_pos_pairs
+            if abs(cluster_prob[cluster_index]) < 0.0000001:  # if within E-7 of zero
+                cluster_prob[cluster_index] = 0
+            print 'to', cluster_prob[cluster_index]
+            number_remaining_pos_pairs -= 1
+            normalizer = sum(cluster_prob)
+            cluster_prob = cluster_prob/normalizer
         else:
             pair = None
             while not pair:

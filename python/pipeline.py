@@ -9,56 +9,72 @@ from metrics import Metrics
 from new_metrics import NewMetrics, count_pairwise_class_balance
 from copy import deepcopy
 import numpy as np
+import cProfile
 import matplotlib.pyplot as plt
 __author__ = 'mbarnes'
 
 
 def main():
-    type = 'real'  # synthetic or real
-    train_size = 500
-    validation_size = 250
-    decision_threshold = 0.95
+    """
+    Runs a single entity resolution on data (real or synthetic) using a match function (logistic regression, decision
+    tree, or random forest)
+    """
+    data_type = 'synthetic'
+    decision_threshold = 0.99
     train_class_balance = 0.5
-    max_block_size = 10
+    max_block_size = 100
     cores = 2
-
-    if type == 'synthetic':
-        database = SyntheticDatabase(100, 10, 10)
+    if data_type == 'synthetic':
+        database_train = SyntheticDatabase(100, 10, 10)
         corruption = 0.1
         corruption_array = corruption*np.random.normal(loc=0.0, scale=1.0, size=[1000,
-                                                       database.database.feature_descriptor.number])
-        database.corrupt(corruption_array)
-    else:
-        regex_path = 'test/test_annotations_10000_cleaned.csv'
-        #database = Database(regex_path, max_records=1000)
-        #database_all_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
-        #database_all_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
-        #database_all_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
-        database_annotations_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
-        database_annotations_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
-        database_annotations_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
-        #database_LM_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
-        #database_LM_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
-        #database_LM_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
+                                                       database_train.database.feature_descriptor.number])
+        database_train.corrupt(corruption_array)
 
-    if type == 'synthetic':
-        labels_train = database_all_train.labels
-        labels_validation = database_all_validation.labels
-        labels_test = database_all_test.labels
-        database_all_train = database_all_train.database
-        database_all_validation = database_all_validation.database
-        database_all_test = database_all_test.database
-    else:
-        labels_train = fast_strong_cluster(database_annotations_train)
-        labels_validation = fast_strong_cluster(database_annotations_validation)
+        database_validation = SyntheticDatabase(100, 10, 10)
+        corruption_array = corruption*np.random.normal(loc=0.0, scale=1.0, size=[1000,
+                                                       database_validation.database.feature_descriptor.number])
+        database_validation.corrupt(corruption_array)
+
+        database_test = SyntheticDatabase(10, 10, 10)
+        corruption_array = corruption*np.random.normal(loc=0.0, scale=1.0, size=[1000,
+                                                       database_test.database.feature_descriptor.number])
+        database_test.corrupt(corruption_array)
+        labels_train = database_train.labels
+        labels_validation = database_validation.labels
+        labels_test = database_test.labels
+        database_train = database_train.database
+        database_validation = database_validation.database
+        database_test = database_test.database
+        single_block = True
+    elif data_type == 'real':
+        # Uncomment to use all features (annotations and LM)
+        #database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
+        #database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
+        #database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
+
+        # Uncomment to only use annotation features
+        database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
+        database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
+        database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
+
+        # Uncomment to only use LM features
+        #database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
+        #database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
+        #database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
+
+        labels_train = fast_strong_cluster(database_train)
+        labels_validation = fast_strong_cluster(database_validation)
         #labels_test = fast_strong_cluster(database_annotations_test)
+        single_block = False
+    else:
+        Exception('Invalid experiment type'+data_type)
 
-    entities = deepcopy(database_annotations_test)
-    blocking_scheme = BlockingScheme(entities, max_block_size, single_block=False)
+    entities = deepcopy(database_test)
+    blocking_scheme = BlockingScheme(entities, max_block_size, single_block=single_block)
 
-    train_seed = generate_pair_seed(database_annotations_train, labels_train, train_class_balance, require_direct_match=True, max_minor_class=50000)
-    validation_seed = generate_pair_seed(database_annotations_validation, labels_validation, 0.5, require_direct_match=True, max_minor_class=50000)
-    # TODO: Use a validation seed, too
+    train_seed = generate_pair_seed(database_train, labels_train, train_class_balance, require_direct_match=True, max_minor_class=500)
+    validation_seed = generate_pair_seed(database_validation, labels_validation, 0.5, require_direct_match=True, max_minor_class=500)
     # forest_all = ForestMatchFunction(database_all_train, labels_train, train_seed, decision_threshold)
     # forest_all.test(database_all_validation, labels_validation, validation_seed)
     # tree_all = TreeMatchFunction(database_all_train, labels_train, train_seed, decision_threshold)
@@ -66,8 +82,11 @@ def main():
     # logistic_all = LogisticMatchFunction(database_all_train, labels_train, train_seed, decision_threshold)
     # logistic_all.test(database_all_validation, labels_validation, validation_seed)
 
-    forest_annotations = ForestMatchFunction(database_annotations_train, labels_train, train_seed, decision_threshold)
-    forest_annotations.test(database_annotations_validation, labels_validation, validation_seed)
+    forest_annotations = ForestMatchFunction(database_train, labels_train, train_seed, decision_threshold)
+    roc = forest_annotations.test(database_validation, labels_validation, validation_seed)
+    #roc.make_plot()
+    #plt.show()
+
     # tree_annotations = TreeMatchFunction(database_annotations_train, labels_train, train_seed, decision_threshold)
     # tree_annotations.test(database_annotations_validation, labels_validation, validation_seed)
     # logistic_annotations = LogisticMatchFunction(database_annotations_train, labels_train, train_seed, decision_threshold)
@@ -102,26 +121,26 @@ def main():
 
     #er = EntityResolution()
     #weak_labels = er.run(entities, match_function, blocking_scheme, cores=cores)
-    weak_labels = weak_connected_components(database_annotations_test, forest_annotations, blocking_scheme)
+    weak_labels = weak_connected_components(database_test, forest_annotations, blocking_scheme)
     entities.merge(weak_labels)
     strong_labels = fast_strong_cluster(entities)
     entities.merge(strong_labels)
-    ## TODO: Write to output recordid, clusterid, phone_numbers
-    out = open('ER.csv', 'w')
-    out.write('phone,cluster_id\n')
-    for cluster_counter, (entity_id, entity) in enumerate(entities.records.iteritems()):
-        phone_index = 21
-        for phone in entity.features[phone_index]:
-            out.write(str(phone)+','+str(cluster_counter)+'\n')
-    out.close()
+
+    # out = open('ER.csv', 'w')
+    # out.write('phone,cluster_id\n')
+    # for cluster_counter, (entity_id, entity) in enumerate(entities.records.iteritems()):
+    #     phone_index = 21
+    #     for phone in entity.features[phone_index]:
+    #         out.write(str(phone)+','+str(cluster_counter)+'\n')
+    # out.close()
 
     print 'Metrics using strong features as surrogate label. Entity resolution run using weak and strong features'
-    # metrics = Metrics(labels_test, weak_labels)
+    metrics = Metrics(labels_test, weak_labels)
     # estimated_test_class_balance = count_pairwise_class_balance(labels_test)
     # new_metrics = NewMetrics(database_all_test, weak_labels, forest_all, estimated_test_class_balance)
-    # metrics.display()
+    metrics.display()
     # new_metrics.display()
 
 
 if __name__ == '__main__':
-    main()
+    cProfile.run('main()')
