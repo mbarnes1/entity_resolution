@@ -5,7 +5,7 @@ from pairwise_features import get_weak_pairwise_features
 import gc
 import traceback
 import os
-from itertools import combinations_with_replacement
+from itertools import combinations_with_replacement, izip
 import networkx
 from copy import deepcopy, copy
 import sys
@@ -268,7 +268,7 @@ def fast_strong_cluster(database):
         index0 = indices[0]
         for index in indices:
             graph.add_edge(index0, index)
-    print 'Finding connected components...'
+    print 'Finding strong connected components...'
     connected_components = networkx.connected_components(graph)
     labels = dict()
     for cluster_label, component in enumerate(connected_components):
@@ -297,7 +297,7 @@ def weak_connected_components(database, match_function, blocking_scheme):
         sys.stdout.flush()
         for idx in record_ids:
             if idx in record_to_blocks:
-                record_to_blocks.add(block)
+                record_to_blocks[idx].add(block)
             else:
                 record_to_blocks[idx] = {block}
     print(' ')
@@ -313,12 +313,15 @@ def weak_connected_components(database, match_function, blocking_scheme):
             current_node = to_explore.pop()
             print '     Exploring node', current_node
             r1 = database.records[current_node]
+            record_pairs = set()
             for block in record_to_blocks[current_node]:
                 for idx in block_to_records[block].difference(to_explore | {current_node}):
                     r2 = database.records[idx]
-                    match, _ = match_function.match(r1, r2)
-                    if match:
-                        to_explore.add(idx)
+                    record_pairs.add((r1, r2, idx))
+            record_pairs = list(record_pairs)
+            matches, _ = match_function.batch_match(record_pairs)
+            idx = [idx[2] for match, idx in izip(matches, record_pairs) if match]
+            to_explore.update(set(idx))
             remove_node(current_node, record_to_blocks, block_to_records)
             component.add(current_node)
         connected_components.append(component)

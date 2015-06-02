@@ -93,7 +93,9 @@ class FeatureDescriptor(object):
         self.strengths = strengths
         self.blocking = blocking
         self.pairwise_uses = pairwise_uses
-        self.number = len(self.names)
+        self.number_weak = sum([x == 'weak' for x in strengths])
+        self.number_strong = sum([x == 'strong' for x in strengths])
+        self.number = len(names)
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__

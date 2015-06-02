@@ -124,16 +124,17 @@ class ForestMatchFunction(object):
         :return prob: Probability of weak match
         """
         n = len(records)
-        m = records(0)(0).feature_descriptor.number
+        if n == 0:
+            return [], []
+        m = records[0][0].feature_descriptor.number_weak
         X = np.empty([n, m])
         idempotence = list()
         for i, pair in enumerate(records):
-            r1 = pair(0)
-            r2 = pair(1)
+            r1 = pair[0]
+            r2 = pair[1]
             idempotence.append(r1 == r2)
             X[i, :] = get_weak_pairwise_features(r1, r2)
         np.copyto(X, self._x_mean, where=np.isnan(X))
         prob = self._classifier.predict_proba(X)[:, 1]
-        match = (prob >= self._decision_threshold) or idempotence
+        match = list(prob >= self._decision_threshold) or idempotence
         return match, prob
-

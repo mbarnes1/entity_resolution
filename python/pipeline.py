@@ -19,10 +19,10 @@ def main():
     Runs a single entity resolution on data (real or synthetic) using a match function (logistic regression, decision
     tree, or random forest)
     """
-    data_type = 'synthetic'
-    decision_threshold = 0.99
+    data_type = 'real'
+    decision_threshold = 0.7
     train_class_balance = 0.5
-    max_block_size = 100
+    max_block_size = 1000
     cores = 2
     if data_type == 'synthetic':
         database_train = SyntheticDatabase(100, 10, 10)
@@ -54,18 +54,18 @@ def main():
         #database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
 
         # Uncomment to only use annotation features
-        database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
-        database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
-        database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
+        #database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
+        #database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
+        #database_test = Database('../data/trafficking/cluster_subsample2_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
 
         # Uncomment to only use LM features
-        #database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
-        #database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
-        #database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
+        database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
+        database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
+        database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
 
         labels_train = fast_strong_cluster(database_train)
         labels_validation = fast_strong_cluster(database_validation)
-        #labels_test = fast_strong_cluster(database_annotations_test)
+        labels_test = fast_strong_cluster(database_test)
         single_block = False
     else:
         Exception('Invalid experiment type'+data_type)
@@ -73,8 +73,8 @@ def main():
     entities = deepcopy(database_test)
     blocking_scheme = BlockingScheme(entities, max_block_size, single_block=single_block)
 
-    train_seed = generate_pair_seed(database_train, labels_train, train_class_balance, require_direct_match=True, max_minor_class=500)
-    validation_seed = generate_pair_seed(database_validation, labels_validation, 0.5, require_direct_match=True, max_minor_class=500)
+    train_seed = generate_pair_seed(database_train, labels_train, train_class_balance, require_direct_match=True, max_minor_class=5000)
+    validation_seed = generate_pair_seed(database_validation, labels_validation, 0.5, require_direct_match=True, max_minor_class=5000)
     # forest_all = ForestMatchFunction(database_all_train, labels_train, train_seed, decision_threshold)
     # forest_all.test(database_all_validation, labels_validation, validation_seed)
     # tree_all = TreeMatchFunction(database_all_train, labels_train, train_seed, decision_threshold)
@@ -123,8 +123,8 @@ def main():
     #weak_labels = er.run(entities, match_function, blocking_scheme, cores=cores)
     weak_labels = weak_connected_components(database_test, forest_annotations, blocking_scheme)
     entities.merge(weak_labels)
-    strong_labels = fast_strong_cluster(entities)
-    entities.merge(strong_labels)
+    #strong_labels = fast_strong_cluster(entities)
+    #entities.merge(strong_labels)
 
     # out = open('ER.csv', 'w')
     # out.write('phone,cluster_id\n')
