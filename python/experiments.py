@@ -1,9 +1,11 @@
 __author__ = 'mbarnes1'
 from database import Database, SyntheticDatabase
 from copy import deepcopy
-from entityresolution import EntityResolution
+from entityresolution import EntityResolution, weak_connected_components, fast_strong_cluster
 from pairwise_features import generate_pair_seed
 from logistic_match import LogisticMatchFunction
+from random_forest_match import ForestMatchFunction
+from blocking import BlockingScheme
 from itertools import izip
 import numpy as np
 from metrics import Metrics
@@ -42,7 +44,8 @@ class Experiment(object):
         self._train_class_balance = train_class_balance
         self.thresholds = thresholds
         print 'Generating pairwise seed for training database'
-        self._train_pair_seed = generate_pair_seed(self._database_train, self._labels_train, train_class_balance)
+        self._train_pair_seed = generate_pair_seed(self._database_train, self._labels_train, train_class_balance, max_minor_class=5000)
+        self._validation_seed = generate_pair_seed(self._database_validation, self._labels_validation, 0.5, max_minor_class=5000)
         self._predicted_labels, self.metrics, self.new_metrics = self.run()
 
     def run(self):
@@ -58,19 +61,22 @@ class Experiment(object):
                                     new_metrics_objects[threshold_index] = NewMetrics
         """
         er = EntityResolution()
-        weak_match_function = LogisticMatchFunction(self._database_train, self._labels_train, self._train_pair_seed, 0.5)
+        #weak_match_function = LogisticMatchFunction(self._database_train, self._labels_train, self._train_pair_seed, 0.5)
+        weak_match_function = ForestMatchFunction(self._database_train, self._labels_train, self._train_pair_seed, 0.5)
         print 'Testing pairwise match function on test database'
-        ROC = weak_match_function.test(self._database_validation, self._labels_validation, 0.5)
+        ROC = weak_match_function.test(self._database_validation, self._labels_validation, self._validation_seed)
         #ROC.make_plot()
         metrics_list = list()
         labels_list = list()
         new_metrics_list = list()
         class_balance_test = count_pairwise_class_balance(self._labels_test)
+        blocks = BlockingScheme(self._database_test, single_block=True)
         for threshold in self.thresholds:
             print 'Running entity resolution at threshold =', threshold
             weak_match_function.set_decision_threshold(threshold)
-            labels_pred = er.run(self._database_test, weak_match_function, single_block=True, max_block_size=np.Inf,
-                                 cores=1)
+            labels_pred = weak_connected_components(self._database_test, weak_match_function, blocks)
+            #labels_pred = er.run(self._database_test, weak_match_function, single_block=True, max_block_size=np.Inf,
+            #                     cores=1)
             metrics_list.append(Metrics(self._labels_test, labels_pred))
             new_metrics_list.append(NewMetrics(self._database_test, labels_pred, weak_match_function, class_balance_test))
             labels_list.append(labels_pred)
@@ -473,7 +479,7 @@ def experiment_wrapper(dataset_name):
                                 train_class_balance, thresholds)
         experiment.plot()
     else:
-        number_thresholds = 30
+        number_thresholds = 5
         if dataset_name == 'restaurant':  # 864 records, 112 matches
             features_path = '../data/restaurant/merged.csv'
             labels_path = '../data/restaurant/labels.csv'
@@ -491,29 +497,38 @@ def experiment_wrapper(dataset_name):
         elif dataset_name == 'trafficking':
             features_path = '../data/trafficking/features.csv'
             labels_path = '../data/trafficking/labels.csv'
-            train_database_size = 3000
-            train_class_balance = 0.4
-            validation_database_size = 3000
-            database = Database(annotation_path=features_path)
+            train_database_size = 300
+            train_class_balance = 0.5
+            validation_database_size = 300
+            #database = Database(annotation_path=features_path)
         else:
             raise Exception('Invalid dataset name')
         thresholds = np.linspace(0, 1, number_thresholds)
-        labels = np.loadtxt(open(labels_path, 'rb'))
-        database_train = database.sample_and_remove(train_database_size)
-        database_validation = database.sample_and_remove(validation_database_size)
-        database_test = database
-        labels_train = dict()
-        labels_validation = dict()
-        labels_test = dict()
-        for identifier, label in enumerate(labels):
-            if identifier in database_train.records:
-                labels_train[identifier] = label
-            elif identifier in database_validation.records:
-                labels_validation[identifier] = label
-            elif identifier in database_test.records:
-                labels_test[identifier] = label
-            else:
-                raise Exception('Record identifier ' + str(identifier) + ' not in either database')
+        # labels = np.loadtxt(open(labels_path, 'rb'))
+        # database_train = database.sample_and_remove(train_database_size)
+        # database_validation = database.sample_and_remove(validation_database_size)
+        # database_test = database
+        # labels_train = dict()
+        # labels_validation = dict()
+        # labels_test = dict()
+        # for identifier, label in enumerate(labels):
+        #     if identifier in database_train.records:
+        #         labels_train[identifier] = label
+        #     elif identifier in database_validation.records:
+        #         labels_validation[identifier] = label
+        #     elif identifier in database_test.records:
+        #         labels_test[identifier] = label
+        #     else:
+        #         raise Exception('Record identifier ' + str(identifier) + ' not in either database')
+        ###
+        database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv', max_records=5000)
+        database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv', max_records=5000)
+        database_test = Database('../data/trafficking/cluster_subsample2_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv', max_records=1000)
+
+        labels_train = fast_strong_cluster(database_train)
+        labels_validation = fast_strong_cluster(database_validation)
+        labels_test = fast_strong_cluster(database_test)
+        ###
 
         experiment = Experiment(database_train, database_validation, database_test,
                                 labels_train, labels_validation, labels_test,
@@ -526,7 +541,7 @@ def experiment_wrapper(dataset_name):
 
 def main():
     #### Real Experiment ####
-    dataset_name = 'synthetic'  # synthetic, synthetic_sizes, restaurant, abt-buy, trafficking
+    dataset_name = 'trafficking'  # synthetic, synthetic_sizes, restaurant, abt-buy, trafficking
 
     if dataset_name == 'synthetic_sizes':  # synthetic datasets at various sizes, to show degredation of performance
         synthetic_sizes()

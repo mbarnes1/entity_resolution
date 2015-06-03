@@ -51,7 +51,7 @@ def main():
         # Uncomment to use all features (annotations and LM)
         #database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
         #database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
-        #database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
+        #database_test = Database('../data/trafficking/cluster_subsample2_10000.csv', header_path='../data/trafficking/cluster_subsample_header_all.csv')
 
         # Uncomment to only use annotation features
         #database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_annotations.csv')
@@ -61,7 +61,7 @@ def main():
         # Uncomment to only use LM features
         database_train = Database('../data/trafficking/cluster_subsample0_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
         database_validation = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
-        database_test = Database('../data/trafficking/cluster_subsample1_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
+        database_test = Database('../data/trafficking/cluster_subsample2_10000.csv', header_path='../data/trafficking/cluster_subsample_header_LM.csv')
 
         labels_train = fast_strong_cluster(database_train)
         labels_validation = fast_strong_cluster(database_validation)

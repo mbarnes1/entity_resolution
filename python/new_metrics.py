@@ -62,13 +62,15 @@ class NewMetrics(object):
             number_pairs = len(record_ids)*(len(record_ids)-1)/2
             print '     Cluster swoosh pairs:', number_pairs
             pairs = combinations(record_ids, 2)
-            cluster_match_pairs = 0
+            record_pairs = list()
             for counter, pair in enumerate(pairs):
-                print '     Checking match ', counter, 'of', number_pairs, 'pairs to lower bound precision'
+                print '     Adding pair', counter, 'of', number_pairs, 'pairs to lower bound precision'
                 r1 = database.records[pair[0]]
                 r2 = database.records[pair[1]]
-                match, _ = self.match_function.match(r1, r2)
-                cluster_match_pairs += match
+                record_pairs.append((r1, r2))
+            print '     Running match function in batch mode on', number_pairs, 'pairs'
+            matches, _ = self.match_function.batch_match(record_pairs)
+            cluster_match_pairs = sum(matches)
             print '     Cluster match pairs:', cluster_match_pairs
             total_swoosh_pairs += number_pairs
             total_match_pairs += cluster_match_pairs
