@@ -289,7 +289,7 @@ def weak_connected_components(database, match_function, blocking_scheme):
     """
     print 'Finding weakly connected components.'
     print 'Building dual hash tables (forward) ...'
-    block_to_records = copy(blocking_scheme.weak_blocks)
+    block_to_records = deepcopy(blocking_scheme.weak_blocks)
     block_to_records.update(blocking_scheme.strong_blocks)
     record_to_blocks = dict()
     for i, (block, record_ids) in enumerate(block_to_records.iteritems()):
