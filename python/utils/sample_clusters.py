@@ -1,54 +1,53 @@
 """
-Randomly samples entire clusters and dumps their results
+Randomly samples entities and dumps the records
 """
 __author__ = 'mbarnes1'
-import sys
-sys.path.append('..')
-from database import Database
 import cProfile
 import numpy as np
+from random import shuffle
 
 
 def main():
-    number_samples = [10000, 100000, 1000000]
-    number_databases = 3
-    cluster_path = '/home/scratch/trafficjam/entity_resolution_outputs/strong_clusters.csv'
-    annotations_path = '/home/scratch/trafficjam/entity_resolution_inputs/master.csv'
-    header_path = '/home/scratch/trafficjam/entity_resolution_inputs/master_header_all.csv'
-    database = Database(annotations_path, header_path=header_path)
+    # User parameters. Input labels are a csv of form record_id, entity_id
+    number_samples = 10
+    truth_path = '../test/labels.csv'
+    out_path = '../test/samples.csv'
+    max_records_per_entity = 1000  # do not sample extremely large clusters (a hack to prevent entire subsample being a single large entity)
+    max_entity_percentage = 0.3  # do not sample clusters which would constitute larger than this percentage of requested number of samples
 
-    ins = open(cluster_path, 'r')
-    cluster_to_indices = dict()
-    next(ins)  # skip header
-    for cluster_counter, line in enumerate(ins):
-        print 'Loading cluster file', cluster_counter
+    # Load the data
+    ins = open(truth_path, 'r')
+    entity_to_records = dict()
+    for counter, line in enumerate(ins):
+        print 'Loading truth file line number', counter
         line = line.rstrip('\n').split(',')
-        index = int(line[0])
-        poster_id = int(line[1])
-        cluster_id = int(line[2])
-        if cluster_id in cluster_to_indices:
-            cluster_to_indices[cluster_id].append(index)
+        record_id = int(line[0])
+        entity_id = int(line[1])
+        if entity_id in entity_to_records:
+            entity_to_records[entity_id].append(record_id)
         else:
-            cluster_to_indices[cluster_id] = [index]
-    cluster_probabilities = list()
-    for cluster, indices in cluster_to_indices.iteritems():
-        cluster_probabilities.append(float(len(indices))/len(database.records))
-    print 'Sampling clusters'
-    cluster_samples = np.random.choice(cluster_to_indices.keys(), min(850000, sum(number_samples)*number_databases), p=cluster_probabilities)  # only ~850,000 strong clusters available
-    cluster_counter = 0
-    for n in number_samples:
-        for j in range(0, number_databases):
-            out_path = '/home/scratch/trafficjam/entity_resolution_inputs/subsample'+str(j)+'_'+str(n)+'.csv'
-            new_database = Database()
-            new_database.feature_descriptor = database.feature_descriptor
-            while len(new_database.records) < n:
-                cluster = cluster_samples[cluster_counter]
-                cluster_counter += 1
-                indices = cluster_to_indices[cluster]
-                if len(indices) < min(10000, 0.05*n):  # only clusters less than 5000 or 5%
-                    for index in indices:
-                        new_database.records[index] = database.records[index]
-            new_database.dump(out_path)
+            entity_to_records[entity_id] = [record_id]
+    ins.close()
+
+    # Sample the entities
+    print 'Sampling entities'
+    entities = entity_to_records.keys()
+    entity_samples = np.random.choice(entities, min(len(entities), number_samples*2), replace=False)
+
+    # Output the results
+    counter = 0
+    sampled_records = []
+    while len(sampled_records) < number_samples:
+        entity = entity_samples[counter]
+        counter += 1
+        records = entity_to_records[entity]
+        if len(records) < min(max_records_per_entity, max_entity_percentage*number_samples):  # only clusters less than 10000 and less than 30%
+            sampled_records.extend(records)
+    shuffle(sampled_records)
+    ins = open(out_path, 'w')
+    for sampled_record in sampled_records[:number_samples]:
+        ins.write(str(sampled_record)+'\n')
+    ins.close()
 
 
 if __name__ == '__main__':
