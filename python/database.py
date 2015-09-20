@@ -191,7 +191,10 @@ class Database(object):
                 print 'Extracting sample', line_index
                 r = Record(line_index, self.feature_descriptor)  # record object from utils
                 features = remove_indices(ignore_indices, sample.rstrip('\n').split(','))
-                r.initialize_from_annotation(features)
+                try:
+                    r.initialize_from_annotation(features)
+                except:
+                    print 'Unable to parse:', sample
                 self.records[line_index] = r
                 if line_index >= max_records-1:
                     break
