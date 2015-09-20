@@ -277,6 +277,64 @@ def fast_strong_cluster(database):
     print 'Finished. Found', cluster_label, 'connected components'
     return labels
 
+def faster_strong_cluster(database):
+    """
+    Merges records with any strong features in common. Used as surrogate ground truth in CHT application
+    Equivalent to running Swoosh using only strong matches, except much faster because of explicit graph exploration
+    :param database: Database object
+    :return labels: Cluster labels in the form of a dictionary [identifier, cluster_label]
+    """
+    strong2index = dict()  # [swoosh index, set of ad indices]  node --> edges
+    index2strong = dict()  # [ad index, list of swoosh indices]  edge --> nodes (note an edge can lead to multiple nodes)
+    cluster_counter = 0
+    cluster_labels = dict()
+    for _, record in database.records.iteritems():
+        indices = record.line_indices
+        strong_features = record.get_features('strong')
+        if not strong_features:  # no strong features, insert singular entity
+            for identifier in indices:
+                cluster_labels[identifier] = cluster_counter
+            cluster_counter += 1
+        for strong in strong_features:
+            if strong in strong2index:
+                strong2index[strong].extend(list(indices))
+            else:
+                strong2index[strong] = list(indices)
+            for index in indices:
+                if index in index2strong:
+                    index2strong[index].append(strong)
+                else:
+                    index2strong[index] = [strong]
+
+    # Determine connected components
+    explored_strong = set()  # swooshed records already explored
+    explored_indices = set()
+    to_explore = list()  # ads to explore
+    for index, strong_features in index2strong.iteritems():
+        if index not in explored_indices:
+            explored_indices.add(index)
+            cc = set()
+            cc.add(index)
+            to_explore.extend(list(strong_features))
+            while to_explore:
+                strong = to_explore.pop()
+                if strong not in explored_strong:
+                    explored_strong.add(strong)
+                    connected_indices = strong2index[strong]
+                    for connected_index in connected_indices:
+                        if connected_index not in explored_indices:
+                            cc.add(connected_index)
+                            explored_indices.add(connected_index)
+                            to_explore.extend(list(index2strong[connected_index]))
+
+            # Found complete connected component, save labels
+            for c in cc:
+                record = database.records[c]
+                for identifier in record.line_indices:
+                    cluster_labels[identifier] = cluster_counter
+            cluster_counter += 1
+    print 'Finished. Found', cluster_counter-1, 'connected components'
+    return cluster_labels
 
 def weak_connected_components(database, match_function, blocking_scheme):
     """
