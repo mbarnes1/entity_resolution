@@ -19,7 +19,7 @@ def main():
     # Load the data
     ins = open(truth_path, 'r')
     ins.next()  # skip header
-    entity_to_records = dict()
+    entity_to_text_index = dict()
     text_to_annotation = dict()
     text_to_entity = dict()
     for counter, line in enumerate(ins):
@@ -31,18 +31,18 @@ def main():
             entity_id = int(line[2])
             text_to_annotation[text_index] = annotation_index
             text_to_entity[text_index] = entity_id
-            if entity_id in entity_to_records:
-                entity_to_records[entity_id].append(text_index)
+            if entity_id in entity_to_text_index:
+                entity_to_text_index[entity_id].append(text_index)
             else:
-                entity_to_records[entity_id] = [text_index]
+                entity_to_text_index[entity_id] = [text_index]
         except:
             print 'Unable to parse:', str(line)
     ins.close()
 
     # Sample the entities
     print 'Sampling entities'
-    entities = entity_to_records.keys()
-    entity_samples = np.random.choice(entities, min(len(entities), number_samples*2), replace=False)
+    entities = entity_to_text_index.keys()
+    shuffle(entities)
 
     # Output the results
     counter = 0
@@ -51,20 +51,20 @@ def main():
             out_path = out_path_prefix + str(j) + '_'+str(n)+'.csv'
             ins = open(out_path, 'w')
             ins.write('annotations_line (0 indexed), text_line (1 indexed), cluster_id\n')
-            sampled_records = []
-            while len(sampled_records) < n:
-                entity = entity_samples[counter]
+            sampled_text_indices = []
+            while len(sampled_text_indices) < n:
+                entity = entities[counter]
                 counter += 1
-                records = entity_to_records[entity]
-                if len(records) < min(max_records_per_entity, max_entity_percentage*number_samples):
-                    sampled_records.extend(records)
+                text_indices = entity_to_text_index[entity]
+                if len(text_indices) < min(max_records_per_entity, max_entity_percentage*number_samples):
+                    sampled_text_indices.extend(text_indices)
             print 'Shuffling results'
-            shuffle(sampled_records)
+            shuffle(sampled_text_indices)
             print 'Writing results'
             ins = open(out_path, 'w')
             ins.write('annotations_line (0 indexed), text_line (1 indexed), cluster_id\n')
-            for sampled_record in sampled_records[:number_samples]:
-                ins.write(str(text_to_annotation[sampled_record]) + ',' + str(sampled_record) + ',' + str(text_to_entity[sampled_record]) + '\n')
+            for sampled_text_index in sampled_text_indices[:number_samples]:
+                ins.write(str(text_to_annotation[sampled_text_index]) + ',' + str(sampled_text_index) + ',' + str(text_to_entity[sampled_text_index]) + '\n')
             ins.close()
 
 
