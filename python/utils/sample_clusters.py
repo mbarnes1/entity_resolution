@@ -9,29 +9,33 @@ from random import shuffle
 
 def main():
     # User parameters. Input labels are a csv of form annotation_index (0 indexed), text_index (1 indexed), entity_id
-    number_samples = 1000
-    truth_path = '../../entity_resolution_inputs/rebuild_phone_clusters.csv'
-    out_path = '../../entity_resolution_inputs/rebuild_clusters_1000.csv'
+    number_samples = 10000
+    truth_path = '../../../entity_resolution_inputs/rebuild_phone_clusters.csv'
+    out_path = '../../../entity_resolution_inputs/rebuild_clusters_10000.csv'
     max_records_per_entity = 1000  # do not sample extremely large clusters (a hack to prevent entire subsample being a single large entity)
     max_entity_percentage = 0.3  # do not sample clusters which would constitute larger than this percentage of requested number of samples
 
     # Load the data
     ins = open(truth_path, 'r')
+    ins.next()  # skip header
     entity_to_records = dict()
     text_to_annotation = dict()
     text_to_entity = dict()
     for counter, line in enumerate(ins):
         print 'Loading truth file line number', counter
         line = line.rstrip('\n').split(',')
-        annotation_index = int(line[0])
-        text_index = int(line[1])
-        entity_id = int(line[2])
-        text_to_annotation[text_index] = annotation_index
-        text_to_entity[text_index] = entity_id
-        if entity_id in entity_to_records:
-            entity_to_records[entity_id].append(text_index)
-        else:
-            entity_to_records[entity_id] = [text_index]
+        try:
+            annotation_index = int(line[0])
+            text_index = int(line[1])
+            entity_id = int(line[2])
+            text_to_annotation[text_index] = annotation_index
+            text_to_entity[text_index] = entity_id
+            if entity_id in entity_to_records:
+                entity_to_records[entity_id].append(text_index)
+            else:
+                entity_to_records[entity_id] = [text_index]
+        except:
+            print 'Unable to parse:', str(line)
     ins.close()
 
     # Sample the entities
@@ -52,7 +56,7 @@ def main():
     shuffle(sampled_records)
     print 'Writing results'
     ins = open(out_path, 'w')
-    ins.write('annotations_line (0 indexed), text_line (1 indexed), cluster_id')
+    ins.write('annotations_line (0 indexed), text_line (1 indexed), cluster_id\n')
     for sampled_record in sampled_records[:number_samples]:
         ins.write(str(text_to_annotation[sampled_record]) + ',' + str(sampled_record) + ',' + str(text_to_entity[sampled_record]) + '\n')
     ins.close()
