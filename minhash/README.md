@@ -5,5 +5,4 @@ Use Minhash to estimate jaccard similarity between documents in order to find ne
 This script uses https://github.com/ekzhu/datasketch  for some computations
 
 ## How to
-    $python2.7 minhash_experiment.py -t 0.8 -match -num 1000000
-    
+    $python2.7 minhash_experiment.py -lt 0.5 -ut 1.0 -steps 30 -num 1000000 -p 15
