@@ -15,7 +15,8 @@ def get_clusters(fn):
     with open(fn,'r') as f:
         f.next()#skip header
         for line in f:
-            yield line.split(',')[1:]
+            a=line.split(',')
+            yield a[0],a[2]
 
 def get_lsh(sig,nbands):
     for i,band in enumerate(np.array_split(sig,nbands)):
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     linestoget=frozenset(line_to_clusters.keys())
 
     fname='/home/scratch/trafficjam/rebuild/processed_phone_stripped_text.txt'
-    mycorpus=[(i+1,set(line.lower().split())) for i,line in enumerate(open(fname,'r')) if i+1 in linestoget]
+    mycorpus=[(i,set(line.lower().split())) for i,line in enumerate(open(fname,'r')) if i in linestoget]
     #make corpus a dictionary. Needed to calculate true jaccard score. 
     #mycorpus={i+1:set(line.lower().split()) for i,line in enumerate(open(fname,'r')) if i+1 in linestoget}
 
@@ -214,7 +215,6 @@ if __name__ == "__main__":
         #for token in doc: m.digest(sha1(token.encode('utf8', 'ignore')))
         hashcorp[key]=m
     print("--- %s seconds ---" % (time.time() - start_time))
-
 
     if calc_clusters:    
         p=Pool(num_processes)
@@ -263,14 +263,14 @@ if __name__ == "__main__":
             #s3=mycorpus[c]
             #jac=float(len(s1.intersection(s2)))/float(len(s1.union(s2)))
             apprx=m1.jaccard(m2)
-            results.append(apprx,1)
+            results.append((apprx,1))
             #f.write(str(abs(jac-apprx))+','+str(apprx)+',1\n')
-            f.write(str(apprx)+','+str(apprx)+',1\n')
+            f.write(str(apprx)+',1\n')
             #jac=float(len(s1.intersection(s3)))/float(len(s1.union(s3)))
             apprx=m1.jaccard(m3)
             results.append((apprx,0))
             #f.write(str(abs(jac-apprx))+','+str(apprx)+',0\n')
-            f.write(str(apprx)+','+str(apprx)+',0\n')
+            f.write(str(apprx)+',0\n')
         f.close()
         #import IPython
         #IPython.embed()
