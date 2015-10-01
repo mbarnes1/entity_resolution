@@ -36,9 +36,10 @@ def main():
     counter = 0
     ins = open(out_path+".csv", 'w')
     ins_labels = open(out_path+"_labels.csv", 'w')
-    ins_labels.write("line_to_use (0 indexed),Null,cluster_id")
+    ins_labels.write("line_to_use (0 indexed),Null,cluster_id\n")
     print 'Writing synthetic data'
     for cluster, size in cluster_sizes.iteritems():
+        print 'Writing cluster of size', size
         # Generate some synthetic data for this cluster
         true_features = cluster*np.ones((size, nfeatures))
         noise_indices = np.random.binomial(1, p_corruption, (size, nfeatures)).astype('bool')
@@ -54,7 +55,7 @@ def main():
                 to_write.append(feature)
             line = ','.join(to_write)+'\n'
             ins.write(line)
-            ins_labels.write(str(counter)+',,'+str(cluster))
+            ins_labels.write(str(counter)+',,'+str(cluster)+'\n')
             counter += 1
     ins.close()
 
