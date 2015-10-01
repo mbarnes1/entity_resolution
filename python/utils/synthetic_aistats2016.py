@@ -1,16 +1,18 @@
 __author__ = 'mbarnes1'
 import cProfile
 import numpy as np
+#TODO: Output the cluster labels
+#TODO: Loop through nrecords and p_corruption
 
 
 def main():
     nrecords = 10000
     example_labels_path = '../../../entity_resolution_inputs/rebuild_clusters1_10000.csv'  # file to model cluster sizes after
-    out_path = '../../../entity_resolution_inputs/synthetic0_' + str(nrecords)
+    out_path = '../../../entity_resolution_inputs/synthetic_' + str(nrecords)
     nfeatures = 100
     p_corruption = 0.1
 
-    print 'Loading loading example clusters'
+    print 'Loading example clusters'
     ins = open(example_labels_path, 'r')
     ins.next()  # skip header
     example_cluster_sizes = dict()
@@ -32,7 +34,9 @@ def main():
             break
     nclusters = len(example_cluster_sizes)
     counter = 0
-    ins = open(out_path, 'w')
+    ins = open(out_path+".csv", 'w')
+    ins_labels = open(out_path+"_labels.csv", 'w')
+    ins_labels.write("line_to_use (0 indexed),Null,cluster_id")
     print 'Writing synthetic data'
     for cluster, size in cluster_sizes.iteritems():
         # Generate some synthetic data for this cluster
@@ -50,8 +54,9 @@ def main():
                 to_write.append(feature)
             line = ','.join(to_write)+'\n'
             ins.write(line)
+            ins_labels.write(str(counter)+',,'+str(cluster))
+            counter += 1
     ins.close()
-
 
 
 if __name__ == '__main__':
