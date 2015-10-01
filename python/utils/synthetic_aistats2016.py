@@ -32,7 +32,7 @@ def main():
             break
     nclusters = len(example_cluster_sizes)
     counter = 0
-    ins.open(out_path)
+    ins = open(out_path, 'w')
     print 'Writing synthetic data'
     for cluster, size in cluster_sizes.iteritems():
         # Generate some synthetic data for this cluster
@@ -41,7 +41,7 @@ def main():
         noise_features = np.random.randint(0, nclusters, (size, nfeatures))
         noise = np.multiply(noise_indices, noise_features)
         features = np.multiply(~noise_indices, true_features)
-        synthetic = noise + features
+        synthetic = noise.astype(int) + features.astype(int)
         synthetic = synthetic.tolist()
         for row in synthetic:
             to_write = []
