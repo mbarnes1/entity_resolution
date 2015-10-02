@@ -45,17 +45,15 @@ def main():
             for cluster, size in cluster_sizes.iteritems():
                 print 'Writing cluster of size', size
                 # Generate some synthetic data for this cluster
-                true_features = cluster*np.ones((size, nfeatures))
+                true_features = (cluster*np.ones((size, nfeatures))).tolist()
                 noise_indices = np.random.binomial(1, p_corruption, (size, nfeatures)).astype('bool')
-                noise_features = np.random.randint(0, nclusters, (size, nfeatures))
-                noise = np.multiply(noise_indices, noise_features)
-                features = np.multiply(~noise_indices, true_features)
-                synthetic = noise.astype(int) + features.astype(int)
-                synthetic = synthetic.tolist()
-                for row in synthetic:
+                for row_counter, row in enumerate(true_features):
                     to_write = []
                     for feature_counter, feature in enumerate(row):
-                        feature = 'f'+str(feature_counter)+'_'+str(feature)
+                        if noise_indices[row_counter][feature_counter]:
+                            feature = 'f'+str(feature_counter)+'_corrupt'
+                        else:
+                            feature = 'f'+str(feature_counter)+'_'+str(feature)
                         to_write.append(feature)
                     line = ' '.join(to_write)+'\n'
                     ins.write(line)
