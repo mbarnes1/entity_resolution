@@ -26,7 +26,7 @@ def main():
 
     for nrecords in nrecords_list:
         for p_corruption in p_corruption_list:
-            out_path = '../../../entity_resolution_inputs/synthetic_' + str(nrecords)+'_corrupt'+str(p_corruption*10)
+            out_path = '../../../entity_resolution_inputs/synthetic_' + str(nrecords)+'_corrupt'+str(int(p_corruption*10))
 
             cluster_sizes = dict()
             counter = 0
@@ -38,7 +38,7 @@ def main():
                     break
             nclusters = len(example_cluster_sizes)
             counter = 0
-            ins = open(out_path+".csv", 'w')
+            ins = open(out_path+".txt", 'w')
             ins_labels = open(out_path+"_labels.csv", 'w')
             ins_labels.write("line_to_use (0 indexed),Null,cluster_id\n")
             print 'Writing synthetic data'
@@ -57,7 +57,7 @@ def main():
                     for feature_counter, feature in enumerate(row):
                         feature = 'f'+str(feature_counter)+'_'+str(feature)
                         to_write.append(feature)
-                    line = ','.join(to_write)+'\n'
+                    line = ' '.join(to_write)+'\n'
                     ins.write(line)
                     ins_labels.write(str(counter)+',,'+str(cluster)+'\n')
                     counter += 1
